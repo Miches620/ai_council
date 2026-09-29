@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.9</title>
+    <title>AI Council v0.10</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -40,6 +40,14 @@
         .status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 99px; }
         .status-absent { background: var(--danger); color: white; }
         .hidden { display: none !important; }
+        .ledger-section { background: #1f1a0e; border: 1px solid var(--warning); border-radius: 4px; padding: 0.5rem; }
+        .ledger-item { background: var(--bg); border-radius: 4px; padding: 0.4rem 0.5rem; margin-bottom: 0.4rem; font-size: 0.78rem; }
+        .ledger-item .lid { font-weight: bold; }
+        .ledger-item .ltext { margin: 0.2rem 0; color: var(--text); }
+        .ledger-item .lmeta { color: var(--text-muted); }
+        .lstatus { font-size: 0.65rem; padding: 1px 6px; border-radius: 99px; color: white; margin-left: 0.3rem; }
+        .st-PROPUESTA { background: #475569; } .st-DISPUTADA { background: var(--warning); }
+        .st-ACORDADA { background: var(--success); } .st-RECHAZADA { background: var(--danger); } .st-REEMPLAZADA { background: #6b7280; }
         .summary-section { background: #1a1a2e; border: 1px solid var(--summ); border-radius: 4px; padding: 0.5rem; }
         .files-section { background: #1a2e1a; border: 1px solid var(--primary); border-radius: 4px; padding: 0.5rem; }
         label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--summ); font-weight: bold; }
@@ -51,7 +59,7 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.9</span></h1>
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.10</span></h1>
         <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
@@ -103,6 +111,10 @@
                 <div id="files-section" class="files-section hidden">
                     <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">📎 Archivos de contexto</h4>
                     <div id="files-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
+                </div>
+                <div class="ledger-section">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--warning);">⚖️ Registro de decisiones</h4>
+                    <div id="ledger-list" style="max-height: 320px; overflow-y: auto;"><span style="font-size: 0.8rem; color: var(--text-muted);">Sin propuestas todavía.</span></div>
                 </div>
                 <div class="summary-section">
                     <h4 style="margin: 0 0 0.5rem 0; color: var(--summ);">📋 Resumen Acumulativo</h4>
@@ -214,6 +226,7 @@
                 turnAttachments: {},
                 summarizerId: null,
                 blindFirstCycle: false,
+                decisions: [],
                 participants: [
                     { id: "chatgpt", name: "ChatGPT", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
                     { id: "meta", name: "Meta", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
@@ -258,6 +271,7 @@
             if (!state.turnAttachments || typeof state.turnAttachments !== 'object') state.turnAttachments = {};
             if (!state.userName) state.userName = "Moderador";
             if (typeof state.blindFirstCycle !== 'boolean') state.blindFirstCycle = false;
+            if (!Array.isArray(state.decisions)) state.decisions = [];
             if (!state.summarizerId) {
                 const last = state.participants[state.participants.length - 1];
                 state.summarizerId = last ? last.id : null;
@@ -328,7 +342,10 @@
             const topicM = content.match(/\*\*Tema:\*\*\s*(.+)/);
             const cumM = content.match(/## 📋 Resumen Acumulativo\n([\s\S]*?)(\n---|\n## 💬)/);
             if (!cumM) return null;
-            return { topic: topicM ? topicM[1].trim() : "", cumulative: cumM[1].trim() };
+            let decisions = [];
+            const lj = content.match(/<!-- LEDGER_JSON: ([\s\S]*?) -->/);
+            if (lj) { try { decisions = JSON.parse(lj[1]); } catch (e) { console.warn("LEDGER_JSON ilegible:", e); } }
+            return { topic: topicM ? topicM[1].trim() : "", cumulative: cumM[1].trim(), decisions: Array.isArray(decisions) ? decisions : [] };
         }
 
         function handleFileInput(evt) {
@@ -366,8 +383,178 @@
         renderInitParticipants();
         renderInitFiles();
 
+        // ---------- REGISTRO DE DECISIONES ----------
+        // Lo mantiene la interfaz (sin LLM). Los LLM solo proponen, apoyan u objetan; los estados finales los pone el moderador.
+        const OPEN_STATES = ['PROPUESTA', 'DISPUTADA'];
+        function cleanMarkerLine(l) { return String(l).replace(/\*\*/g, "").replace(/^[\s>*\-•]+/, "").trim(); }
+        function isLedgerLine(l) { return /^(PROPONGO(\s*\(\s*reemplaza\s+D\d+\s*\))?|APOYO|OBJETO)\s*:/i.test(cleanMarkerLine(l)); }
+        function findDecision(id) { return state.decisions.find(d => d.id.toUpperCase() === String(id).toUpperCase()); }
+        function sysMsg(text) { state.messages.push({ sender: "Sistema", text: text, type: "system", timestamp: now(), cycle: state.cycle }); }
+
+        function recomputeStatus(d) {
+            if (!OPEN_STATES.includes(d.status)) return;
+            const objects = Object.values(d.stances).some(st => st.type === 'OBJETO');
+            d.status = objects ? 'DISPUTADA' : 'PROPUESTA';
+        }
+
+        function setStance(d, who, type, reason) {
+            d.stances[who] = { type: type, reason: reason || "", cycle: state.cycle };
+            d.history.push({ who: who, type: type, reason: reason || "", cycle: state.cycle, time: now() });
+            recomputeStatus(d);
+        }
+
+        function processLedgerMarkers(text, who) {
+            const notes = [];
+            String(text || "").split("\n").forEach(raw => {
+                const l = cleanMarkerLine(raw);
+                let m;
+                if ((m = l.match(/^PROPONGO(?:\s*\(\s*reemplaza\s+(D\d+)\s*\))?\s*:\s*(.+)$/i))) {
+                    const txt = m[2].trim();
+                    const dup = state.decisions.find(d => d.proposer === who && d.text.toLowerCase() === txt.toLowerCase());
+                    if (dup) return;
+                    const d = {
+                        id: "D" + (state.decisions.length + 1), text: txt, proposer: who, cycle: state.cycle, time: now(),
+                        status: 'PROPUESTA', stances: {}, history: [], replaces: null, pendingReplacement: null, replacedBy: null,
+                        presentAtProposal: state.participants.filter(p => p.active).map(p => p.name), resolution: null
+                    };
+                    state.decisions.push(d);
+                    setStance(d, who, 'APOYO', "(propone)");
+                    notes.push("⚖️ Nueva propuesta " + d.id + " de " + who + ": " + txt);
+                    if (m[1]) {
+                        const old = findDecision(m[1]);
+                        if (old && old.status !== 'REEMPLAZADA' && old.id !== d.id) { d.replaces = old.id; old.pendingReplacement = d.id; notes.push("🔁 " + d.id + " propone reemplazar a " + old.id + " (pendiente de confirmación del moderador)."); }
+                        else notes.push("⚠️ " + who + " quiso reemplazar " + m[1] + ", que no existe o ya fue reemplazada.");
+                    }
+                } else if ((m = l.match(/^APOYO\s*:\s*(.+)$/i))) {
+                    (m[1].match(/D\d+/gi) || []).forEach(id => {
+                        const d = findDecision(id);
+                        if (!d) { notes.push("⚠️ " + who + " apoyó " + id + ", que no existe. Ignorado."); return; }
+                        if (!OPEN_STATES.includes(d.status)) { notes.push("ℹ️ " + who + " apoyó " + d.id + ", que ya está " + d.status + ". No cambia su estado."); return; }
+                        setStance(d, who, 'APOYO', "");
+                    });
+                } else if ((m = l.match(/^OBJETO\s*:\s*(D\d+)\s*(?:[—–:\-]+\s*(.*))?$/i))) {
+                    const d = findDecision(m[1]); const reason = (m[2] || "").trim();
+                    if (!d) { notes.push("⚠️ " + who + " objetó " + m[1] + ", que no existe. Ignorado."); return; }
+                    if (!reason) { notes.push("⚠️ " + who + " objetó " + d.id + " sin motivo: la objeción NO se registró (formato: OBJETO: " + d.id + " — motivo)."); return; }
+                    if (!OPEN_STATES.includes(d.status)) {
+                        d.history.push({ who: who, type: 'OBJETO', reason: reason, cycle: state.cycle, time: now(), late: true });
+                        notes.push("ℹ️ " + who + " objetó " + d.id + ", que ya está " + d.status + ": queda en el historial, no cambia su estado."); return;
+                    }
+                    setStance(d, who, 'OBJETO', reason);
+                }
+            });
+            notes.forEach(sysMsg);
+        }
+
+        function silentFor(d) {
+            return state.participants.filter(p => !d.stances[p.name]).map(p => p.name + (p.active ? "" : " (ausente)"));
+        }
+        function stanceSummary(d) {
+            const sup = Object.entries(d.stances).filter(([, st]) => st.type === 'APOYO').map(([w]) => w);
+            const obj = Object.entries(d.stances).filter(([, st]) => st.type === 'OBJETO').map(([w, st]) => w + " (\"" + st.reason + "\")");
+            const sil = silentFor(d);
+            const parts = [];
+            if (sup.length) parts.push("apoyan: " + sup.join(", "));
+            if (obj.length) parts.push("objetan: " + obj.join("; "));
+            if (sil.length) parts.push("sin pronunciarse: " + sil.join(", "));
+            return parts.join(" · ");
+        }
+        function ledgerLine(d) {
+            let l = d.id + " · " + d.status + " · \"" + d.text + "\" · propone: " + d.proposer + " (Ciclo " + d.cycle + ")";
+            if (d.replaces) l += " · reemplaza a " + d.replaces;
+            if (d.pendingReplacement) l += " · reemplazo propuesto por " + d.pendingReplacement + " (pendiente)";
+            if (d.replacedBy) l += " · reemplazada por " + d.replacedBy;
+            if (d.resolution) {
+                l += " · " + d.status + " por " + d.resolution.by + " (Ciclo " + d.resolution.cycle + ")";
+                if (d.resolution.note) l += " — " + d.resolution.note;
+                if (d.resolution.objectors && d.resolution.objectors.length) l += " · CON OBJECIÓN VIGENTE de " + d.resolution.objectors.join("; ");
+                if (d.resolution.silent && d.resolution.silent.length) l += " · sin pronunciarse al resolver: " + d.resolution.silent.join(", ");
+            } else {
+                const ss = stanceSummary(d); if (ss) l += " · " + ss;
+            }
+            return l;
+        }
+        function ledgerText() { return state.decisions.map(ledgerLine).join("\n"); }
+
+        function resolveDecision(id, status) {
+            const d = findDecision(id); if (!d) return;
+            if (status === 'ACORDADA') {
+                const objectors = Object.entries(d.stances).filter(([, st]) => st.type === 'OBJETO').map(([w, st]) => w + " (\"" + st.reason + "\")");
+                const silent = silentFor(d);
+                if (objectors.length || silent.length) {
+                    let msg = "⚠️ " + d.id + ": \"" + d.text + "\"\n\n";
+                    if (objectors.length) msg += "Objeciones vigentes: " + objectors.join("; ") + "\n";
+                    if (silent.length) msg += "Sin pronunciarse: " + silent.join(", ") + "\n";
+                    msg += "\n¿Acordar igual? Quedará constancia en el registro, en los prompts y en el export.";
+                    if (!confirm(msg)) return;
+                }
+                d.status = 'ACORDADA';
+                d.resolution = { by: state.userName, cycle: state.cycle, time: now(), note: "", objectors: objectors, silent: silent };
+                sysMsg("✔️ " + state.userName + " marcó " + d.id + " como ACORDADA" + (objectors.length ? " (con objeción vigente de " + objectors.join("; ") + ")" : "") + (silent.length ? " · sin pronunciarse: " + silent.join(", ") : "") + ".");
+            } else if (status === 'RECHAZADA') {
+                const note = prompt("Motivo del rechazo de " + d.id + " (opcional):", "");
+                if (note === null) return;
+                d.status = 'RECHAZADA';
+                d.resolution = { by: state.userName, cycle: state.cycle, time: now(), note: note.trim(), objectors: [], silent: [] };
+                if (d.pendingReplacement) { const nd = findDecision(d.pendingReplacement); if (nd) nd.replaces = null; d.pendingReplacement = null; }
+                sysMsg("✖️ " + state.userName + " marcó " + d.id + " como RECHAZADA" + (note.trim() ? " — " + note.trim() : "") + ".");
+                const orphan = state.decisions.find(x => x.replacedBy === d.id);
+                if (orphan) sysMsg("ℹ️ " + orphan.id + " sigue REEMPLAZADA por " + d.id + ", que ahora está RECHAZADA: no queda ninguna vigente sobre ese tema. Si querés recuperarla, que alguien la vuelva a proponer.");
+            }
+            saveState(); renderAll();
+        }
+
+        function confirmReplacement(oldId) {
+            const old = findDecision(oldId); if (!old || !old.pendingReplacement) return;
+            const nd = findDecision(old.pendingReplacement);
+            if (!confirm("¿Confirmás que " + nd.id + " reemplaza a " + old.id + "?\n\n" + old.id + ": " + old.text + "\n→ " + nd.id + ": " + nd.text + "\n\n" + old.id + " quedará REEMPLAZADA (no se borra).")) return;
+            old.status = 'REEMPLAZADA'; old.replacedBy = nd.id; old.pendingReplacement = null;
+            old.resolution = { by: state.userName, cycle: state.cycle, time: now(), note: "reemplazada por " + nd.id, objectors: [], silent: [] };
+            sysMsg("🔁 " + state.userName + " confirmó que " + nd.id + " reemplaza a " + old.id + ".");
+            saveState(); renderAll();
+        }
+        function rejectReplacement(oldId) {
+            const old = findDecision(oldId); if (!old || !old.pendingReplacement) return;
+            const nd = findDecision(old.pendingReplacement); if (nd) nd.replaces = null;
+            sysMsg("↩️ " + state.userName + " no aceptó el reemplazo de " + old.id + " por " + old.pendingReplacement + " (ambas siguen vigentes).");
+            old.pendingReplacement = null; saveState(); renderAll();
+        }
+
+        function renderLedger() {
+            const el = document.getElementById('ledger-list');
+            if (!state.decisions.length) { el.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">Sin propuestas todavía.</span>'; return; }
+            el.innerHTML = "";
+            state.decisions.slice().reverse().forEach(d => {
+                const div = document.createElement('div'); div.className = 'ledger-item';
+                let html = '<span class="lid">' + esc(d.id) + '</span><span class="lstatus st-' + esc(d.status) + '">' + esc(d.status) + '</span>' +
+                    '<div class="ltext">' + esc(d.text) + '</div><div class="lmeta">propone: ' + esc(d.proposer) + ' (C' + d.cycle + ')';
+                if (d.replaces) html += ' · reemplaza a ' + esc(d.replaces);
+                if (d.replacedBy) html += ' · reemplazada por ' + esc(d.replacedBy);
+                html += '</div>';
+                if (d.resolution) {
+                    html += '<div class="lmeta">' + esc(d.status) + ' por ' + esc(d.resolution.by) + ' (C' + d.resolution.cycle + ')' + (d.resolution.note ? ' — ' + esc(d.resolution.note) : '') + '</div>';
+                    if (d.resolution.objectors && d.resolution.objectors.length) html += '<div class="lmeta" style="color: var(--warning);">con objeción vigente: ' + esc(d.resolution.objectors.join("; ")) + '</div>';
+                    if (d.resolution.silent && d.resolution.silent.length) html += '<div class="lmeta">sin pronunciarse: ' + esc(d.resolution.silent.join(", ")) + '</div>';
+                } else {
+                    html += '<div class="lmeta">' + esc(stanceSummary(d)) + '</div>';
+                }
+                const btns = [];
+                const sid = esc(d.id);
+                if (OPEN_STATES.includes(d.status)) {
+                    btns.push("<button class='success tiny' onclick=\"resolveDecision('" + sid + "','ACORDADA')\">✔ Acordar</button>");
+                    btns.push("<button class='danger tiny' onclick=\"resolveDecision('" + sid + "','RECHAZADA')\">✖ Rechazar</button>");
+                }
+                if (d.pendingReplacement) {
+                    btns.push("<button class='secondary tiny' onclick=\"confirmReplacement('" + sid + "')\">↻ Confirmar reemplazo por " + esc(d.pendingReplacement) + "</button>");
+                    btns.push("<button class='secondary tiny' onclick=\"rejectReplacement('" + sid + "')\">No reemplazar</button>");
+                }
+                if (btns.length) html += '<div class="btn-group" style="margin-top: 0.3rem;">' + btns.join("") + '</div>';
+                div.innerHTML = html; el.appendChild(div);
+            });
+        }
+
         // ---------- EXTRACCIÓN ----------
-        function isRequestLine(l) { return /^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:/i.test(l); }
+        function isRequestLine(l) { return /^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:/i.test(l) || isLedgerLine(l); }
 
         function extractSummary(text) {
             if (!text || !text.trim()) return "";
@@ -490,6 +677,7 @@
             const sp = built.find(p => p.name === selName);
             state.summarizerId = sp ? sp.id : (built[0] ? built[0].id : null);
             state.contextFiles = initFiles.slice();
+            state.decisions = [];
             state.blindFirstCycle = document.getElementById('init-blind').checked;
             state.pendingAttachments = {}; state.deliveredFiles = {}; state.turnAttachments = {};
             state.messages.push({ sender: userName, text: "Inicia el debate sobre: " + topic, summary: "Inicia el debate sobre: " + topic, type: "moderator", timestamp: now(), cycle: state.cycle });
@@ -497,6 +685,8 @@
             const resumeFile = initFiles.filter(f => f.isDebateExport).pop();
             if (resumeFile && resumeFile.parsed) {
                 state.cumulativeSummary = resumeFile.parsed.cumulative + "\n[DEBATE_RETOMADO desde " + resumeFile.name + "]";
+                state.decisions = (resumeFile.parsed.decisions || []);
+                if (state.decisions.length) state.messages.push({ sender: "Sistema", text: "⚖️ Registro de decisiones restaurado: " + state.decisions.length + " propuesta(s).", type: "system", timestamp: now(), cycle: state.cycle });
                 state.messages.push({ sender: "Sistema", text: "🔄 Debate retomado desde \"" + resumeFile.name + "\": el Resumen Acumulativo del debate anterior se cargó como contexto.", type: "system", timestamp: now(), cycle: state.cycle });
             }
             document.getElementById('init-screen').classList.add('hidden');
@@ -611,6 +801,7 @@
             // PRESERVA la respuesta intermedia y su síntesis como evidencia dentro del turno
             const summary = document.getElementById('summary-input').value.trim() || extractSummary(response);
             state.messages.push({ sender: currentP.name, text: response, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle });
+            processLedgerMarkers(response, currentP.name);
             const snapshot = (state.pendingAttachments[currentP.id] || []).slice();
             state.deliveredFiles[currentP.id] = unionArr(state.deliveredFiles[currentP.id], snapshot);
             state.pendingAttachments[currentP.id] = [];
@@ -627,6 +818,7 @@
             const summary = document.getElementById('summary-input').value.trim() || extractSummary(response);
             const currentP = state.participants[state.currentParticipantIndex];
             state.messages.push({ sender: currentP.name, text: response, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle });
+            processLedgerMarkers(response, currentP.name);
             if (!state.spokenThisCycle.includes(currentP.id)) state.spokenThisCycle.push(currentP.id);
             state.reinsertQueue = state.reinsertQueue.filter(id => id !== currentP.id);
             currentP.reintegratedAtMsgIndex = null;
@@ -672,6 +864,7 @@
             state.participants.forEach(p => { p.reintegratedAtMsgIndex = null; });
             cumulativeUpdatedCycle = 0;
             state.messages.push({ sender: state.userName, text: text, summary: text, type: "moderator", timestamp: now(), cycle: state.cycle });
+            processLedgerMarkers(text, state.userName);
             const firstIdx = state.participants.findIndex(p => p.active);
             state.currentParticipantIndex = firstIdx !== -1 ? firstIdx : -1;
             document.getElementById('intervention-text').value = "";
@@ -722,6 +915,7 @@
                 msg.text.split("\n").forEach(l => { if (l.includes("PARA " + participant.name + ":")) paraLines.push(l.trim()); });
             });
             if (paraLines.length) summary += "## NOTAS DIRIGIDAS A VOS:\n" + paraLines.join("\n") + "\n\n";
+            if (state.decisions.length && !isBlindFor(participant)) summary += "## REGISTRO DE DECISIONES:\n" + ledgerText() + "\n\n";
             summary += "---\nRetomá el debate desde tu TAG de ausencia. Cuando te llegue tu prompt de turno, incluirá además las NOVEDADES posteriores a este resumen.";
             document.getElementById('reintegration-summary').value = summary;
             document.getElementById('reintegration-modal').style.display = 'flex';
@@ -740,7 +934,7 @@
 
         function finalizeDebate(participant) {
             closeModals();
-            const prompt = "Eres " + participant.name + ". El debate sobre \"" + state.topic + "\" ha finalizado.\nRedacta un Markdown con: 1) Conclusiones, 2) Acuerdos/desacuerdos, 3) Próximos pasos para " + state.userName + ".\n\nRESUMEN_ACUMULATIVO:\n" + state.cumulativeSummary + "\n\nSÍNTESIS FINAL DEL CICLO " + state.cycle + ":\n" + cycleSynthesis();
+            const prompt = "Eres " + participant.name + ". El debate sobre \"" + state.topic + "\" ha finalizado.\nRedacta un Markdown con: 1) Conclusiones, 2) Acuerdos/desacuerdos, 3) Próximos pasos para " + state.userName + ".\n\nREGISTRO DE DECISIONES (oficial; respetá los estados, no conviertas en acuerdo lo que no lo es):\n" + (ledgerText() || "(sin propuestas)") + "\n\nRESUMEN_ACUMULATIVO:\n" + state.cumulativeSummary + "\n\nSÍNTESIS FINAL DEL CICLO " + state.cycle + ":\n" + cycleSynthesis();
             navigator.clipboard.writeText(prompt).catch(err => console.warn("No se pudo copiar:", err));
             // Conservar primero: el export es obligatorio antes de borrar el estado local
             exportDebate();
@@ -775,7 +969,10 @@
             if (state.contextFiles.length) {
                 md += "## 📎 Archivos de contexto\n\n" + state.contextFiles.map(f => "- " + f.name + " (leído como .txt)").join("\n") + "\n\n---\n\n";
             }
-            md += "## 📋 Resumen Acumulativo\n\n" + (state.cumulativeSummary || "(vacío)") + "\n\n---\n\n## 💬 Transcripción Completa\n\n";
+            md += "## 📋 Resumen Acumulativo\n\n" + (state.cumulativeSummary || "(vacío)") + "\n\n---\n\n";
+            md += "## ⚖️ Registro de Decisiones\n\n" + (state.decisions.length ? state.decisions.map(d => "- " + ledgerLine(d)).join("\n") : "(sin propuestas)") + "\n\n";
+            if (state.decisions.length) md += "<!-- LEDGER_JSON: " + JSON.stringify(state.decisions).replace(/--/g, "\\u002d\\u002d") + " -->\n\n";
+            md += "---\n\n## 💬 Transcripción Completa\n\n";
             state.messages.forEach(msg => {
                 md += "### " + msg.sender + " (" + msg.timestamp + ")\n" + msg.text + "\n";
                 if (msg.summary && msg.type !== 'system') md += "\n> ✂️ Síntesis: " + msg.summary + "\n";
@@ -809,7 +1006,7 @@
 
         function renderAll() {
             document.querySelectorAll('.uname').forEach(el => { el.textContent = state.userName; });
-            renderParticipants(); renderFiles(); renderChat(); renderControls(); renderCumulativeSummary();
+            renderParticipants(); renderFiles(); renderChat(); renderControls(); renderCumulativeSummary(); renderLedger();
         }
 
         function renderParticipants() {
@@ -891,6 +1088,16 @@
                 }
             }
 
+            if (state.decisions.length) {
+                if (isBlindFor(p)) {
+                    const own = state.decisions.filter(d => d.cycle !== 1 || d.proposer === p.name || d.proposer === state.userName);
+                    if (own.length) prompt += "\n## REGISTRO DE DECISIONES (lo mantiene la interfaz; en el Ciclo 1 a ciegas solo ves las tuyas y las del moderador):\n" + own.map(ledgerLine).join("\n") + "\n";
+                } else {
+                    prompt += "\n## REGISTRO DE DECISIONES (lo mantiene la interfaz; solo el moderador marca ACORDADA/RECHAZADA/REEMPLAZADA):\n" + ledgerText() + "\n";
+                }
+            }
+            prompt += "\n## CÓMO PROPONER Y POSICIONARTE (líneas propias, antes del RESUMEN):\n- \"PROPONGO: <decisión concreta>\" (o \"PROPONGO (reemplaza D2): ...\" para mejorar una existente).\n- \"APOYO: D1, D3\"\n- \"OBJETO: D2 — <motivo>\" (sin motivo no se registra).\nNo declares decisiones como tomadas: solo el moderador acuerda.\n";
+
             const absentees = state.participants.filter(x => !x.active);
             if (absentees.length > 0) {
                 prompt += "\n⚠️ AUSENTES: " + absentees.map(a => a.name + " (desde " + a.leftAtTime + ")").join(', ') + ".\nSi mencionás algo crítico para alguno, agregá una línea \"PARA [Nombre]: ...\" (máx 1 línea c/u).\n";
@@ -904,7 +1111,7 @@
             }
 
             if (isSummarizerTurn()) {
-                prompt += "\n## TU ROL ESPECIAL (" + p.name + ", cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que sea exhaustiva y permita RETOMAR el debate en el futuro sin perder nada. Debe incluir:\n   - Ciclos anteriores y actual, con la posición de cada participante (incluidos reincorporados y respuestas intermedias).\n   - Decisiones tomadas.\n   - Pendientes.\n   - Ideas DESCARTADAS o rechazadas (con el motivo).\n   - Contradicciones abiertas o cambios de postura.\n   - TAGs de ausencia.\nLa interfaz la capturará automáticamente.\n";
+                prompt += "\n## TU ROL ESPECIAL (" + p.name + ", cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que sea exhaustiva y permita RETOMAR el debate en el futuro sin perder nada. Debe incluir:\n   - Ciclos anteriores y actual, con la posición de cada participante (incluidos reincorporados y respuestas intermedias).\n   - Estado de las propuestas refiriéndote a ellas por número (D1, D2...). NO escribas \"Decisiones tomadas\": el REGISTRO DE DECISIONES lo mantiene la interfaz y solo el moderador acuerda.\n   - Pendientes.\n   - Ideas DESCARTADAS o rechazadas (con el motivo).\n   - Contradicciones abiertas o cambios de postura.\n   - TAGs de ausencia.\nLa interfaz la capturará automáticamente.\n";
             } else {
                 prompt += "\nTu turno, " + p.name + ". Respondé al último punto con tu opinión técnica.\n";
             }
@@ -921,7 +1128,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.9 cargado correctamente.");
+        console.log("✅ AI Council v0.10 cargado correctamente.");
     </script>
 </body>
 </html>

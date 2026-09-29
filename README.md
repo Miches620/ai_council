@@ -51,6 +51,32 @@ colectivo del proceso.
 - Al cierre: modal para **intervenir como moderador** o **continuar al ciclo siguiente**.
 - El indicador de turno muestra la rotación real simulada: `A continuación: X → Y → Z`.
 
+### Registro de decisiones
+El consejo **propone**; el moderador **decide**. El registro lo mantiene la interfaz (sin LLM),
+viaja en cada prompt, en los snapshots de reincorporación, en el prompt de cierre y en el export.
+
+- **Proponer:** cualquier participante (o el moderador en una intervención) escribe una línea
+  `PROPONGO: <decisión concreta>`. La interfaz le asigna número (`D1`, `D2`…); quien propone
+  cuenta como apoyo.
+- **Posicionarse:** `APOYO: D1, D3` · `OBJETO: D2 — <motivo>`. **Sin motivo, la objeción no se
+  registra** (queda un aviso). Vale la última postura de cada uno; el historial se conserva.
+- **Estados:**
+
+  | Estado | Quién lo pone |
+  |---|---|
+  | `PROPUESTA` | automático (sin objeciones vigentes) |
+  | `DISPUTADA` | automático (al menos una objeción vigente; vuelve a PROPUESTA si se levantan todas) |
+  | `ACORDADA` / `RECHAZADA` | **solo el moderador**, con botones en el panel lateral |
+  | `REEMPLAZADA` | el moderador confirma un `PROPONGO (reemplaza D2): ...` |
+
+- **Acordar con constancia:** si hay objeciones vigentes o integrantes sin pronunciarse
+  (incluidos ausentes), la interfaz avisa y, si confirmás, queda escrito en la decisión.
+- **Nada se borra:** lo reemplazado queda `REEMPLAZADA`, con referencia a su sucesora.
+- El resumidor ya **no** escribe "Decisiones tomadas": se refiere a las propuestas por número.
+- En el Ciclo 1 a ciegas, cada uno solo ve sus propias propuestas y las del moderador.
+- El export `.md` incluye el registro legible y un bloque `LEDGER_JSON` que permite
+  **restaurarlo exacto** al retomar el debate.
+
 ### Primera vuelta a ciegas
 - En el **Ciclo 1**, cada participante responde **sin ver** las respuestas de los demás LLMs
   (sí ve las intervenciones del moderador). Evita que el primero en hablar marque el rumbo
@@ -179,14 +205,14 @@ Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve p
 | v0.8.1 | Seguridad y conservación: el contenido de los LLMs se muestra como texto (sin interpretar HTML), el acumulativo ya no se trunca en silencio (aviso a partir de 8000 caracteres), finalizar siempre exporta antes de borrar y "Cancelar" mantiene el debate. |
 | v0.8.2 | Neutral para uso público: sin referencias a MicheLab en la interfaz, nombre del moderador recordado, resumidor por defecto = último de la lista, textos de ausencia neutrales, clave de almacenamiento `ai_council_state` con migración automática. |
 | v0.9 | Primera vuelta a ciegas (opcional, activada por defecto): Ciclo 1 sin ver al resto, Ciclo 2 con las posturas ciegas tal cual y pedido explícito de desacuerdos. |
+| v0.10 | Registro de decisiones: `PROPONGO` / `APOYO` / `OBJETO` con motivo; estados PROPUESTA, DISPUTADA, ACORDADA, RECHAZADA y REEMPLAZADA; solo el moderador resuelve, con constancia de objeciones y silencios; restauración exacta al retomar. |
 
 ---
 
 ## Limitaciones conocidas y próximos pasos
 
-- Las **decisiones** viven embebidas en texto; una capa estructurada de decisiones (estado
-  consolidado vs. delta) solo se agregará cuando debates reales muestren pérdida de
-  contradicciones o decisiones provisionales en la compresión.
+- Las decisiones ya no viven solo embebidas en texto: el registro de decisiones (v0.10) se agregó
+  después de que un debate real mostrara disenso perdido y atribuciones inventadas en el resumen.
 - Prueba de estrés real superada: debate técnico (3 ciclos, ausencias
   escalonadas, adjuntos encadenados y acuerdos refinados ciclo a ciclo) validó el
   protocolo, la preservación de turnos multi-prompt y el retomado desde export.
