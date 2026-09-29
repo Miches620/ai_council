@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.8.1</title>
+    <title>AI Council v0.8.2</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
             --primary: #3b82f6; --success: #22c55e; --warning: #f59e0b;
-            --danger: #ef4444; --border: #334155; --qwen: #8b5cf6;
+            --danger: #ef4444; --border: #334155; --summ: #8b5cf6;
         }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
         header { background-color: var(--panel); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
@@ -17,13 +17,13 @@
         main { flex: 1; display: flex; flex-direction: column; padding: 1rem 2rem; overflow: hidden; }
         .chat-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding-bottom: 1rem; }
         .message { background-color: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-width: 80%; }
-        .message.miche { align-self: flex-end; border-right: 4px solid var(--primary); }
+        .message.moderator, .message.miche { align-self: flex-end; border-right: 4px solid var(--primary); }
         .message.llm { align-self: flex-start; border-left: 4px solid var(--success); }
-        .message.qwen { border-left-color: var(--qwen); }
+        .message.summarizer { border-left-color: var(--summ); }
         .message.system { align-self: center; background-color: #334155; font-size: 0.85rem; color: var(--text-muted); text-align: center; max-width: 90%; }
         .message .sender { font-weight: bold; margin-bottom: 0.5rem; display: block; }
         .message .content { white-space: pre-wrap; word-break: break-word; }
-        .message .synth { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.8rem; color: var(--qwen); }
+        .message .synth { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.8rem; color: var(--summ); }
         .controls { background-color: var(--panel); border-top: 1px solid var(--border); padding: 1rem; border-radius: 8px; }
         .prompt-box { background-color: #0f172a; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem; max-height: 200px; overflow-y: auto; color: #cbd5e1; }
         textarea, input, select { width: 100%; background-color: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; box-sizing: border-box; font-family: inherit; }
@@ -40,9 +40,9 @@
         .status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 99px; }
         .status-absent { background: var(--danger); color: white; }
         .hidden { display: none !important; }
-        .summary-section { background: #1a1a2e; border: 1px solid var(--qwen); border-radius: 4px; padding: 0.5rem; }
+        .summary-section { background: #1a1a2e; border: 1px solid var(--summ); border-radius: 4px; padding: 0.5rem; }
         .files-section { background: #1a2e1a; border: 1px solid var(--primary); border-radius: 4px; padding: 0.5rem; }
-        label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--qwen); font-weight: bold; }
+        label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--summ); font-weight: bold; }
         .init-box { width: 420px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
         .init-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border-radius: 4px; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
     </style>
@@ -51,8 +51,8 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.8.1</span></h1>
-        <input type="text" id="username-input" value="Miche" placeholder="Nombre de Usuario" style="width: 420px;">
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.8.2</span></h1>
+        <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
 
@@ -101,7 +101,7 @@
                     <div id="files-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
                 </div>
                 <div class="summary-section">
-                    <h4 style="margin: 0 0 0.5rem 0; color: var(--qwen);">📋 Resumen Acumulativo</h4>
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--summ);">📋 Resumen Acumulativo</h4>
                     <div id="cumulative-summary-preview" style="font-size: 0.8rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: var(--text-muted);">Aún no se generó resumen.</div>
                 </div>
                 <div id="aside-tips" style="margin-top: auto; font-size: 0.8rem; color: var(--text-muted);">
@@ -122,9 +122,9 @@
                     <textarea id="response-input" rows="4" placeholder="Pega aquí la respuesta COMPLETA del LLM..."></textarea>
                     <label class="mini">✂️ Resumen sintético (auto-extraído, editable). Es lo único que verá el próximo LLM:</label>
                     <textarea id="summary-input" rows="2" placeholder="Se autocompleta al pegar la respuesta..."></textarea>
-                    <div id="qwen-summary-section" class="hidden">
+                    <div id="cumulative-section" class="hidden">
                         <label class="mini" id="summarizer-label">📋 RESUMEN_ACUMULATIVO (auto-extraído, editable):</label>
-                        <textarea id="qwen-summary-input" rows="6"></textarea>
+                        <textarea id="cumulative-input" rows="6"></textarea>
                     </div>
                     <div class="btn-group"><button onclick="submitResponse()">Guardar Respuesta y Continuar ➡️</button></div>
                 </div>
@@ -139,14 +139,14 @@
             <p>Todos los LLMs activos hablaron en este ciclo y el resumidor cerró con el acumulativo.</p>
             <div class="btn-group" style="flex-direction: column;">
                 <button onclick="startNextCycle()">Continuar al Ciclo Siguiente ➡️</button>
-                <button class="secondary" onclick="showMicheIntervention()">✋ Intervenir como <span class="uname">Miche</span></button>
+                <button class="secondary" onclick="showModeratorIntervention()">✋ Intervenir como <span class="uname">Moderador</span></button>
             </div>
         </div>
     </div>
 
     <div id="intervention-modal" class="modal-overlay">
         <div class="modal">
-            <h3>✋ Intervención de <span class="uname">Miche</span></h3>
+            <h3>✋ Intervención de <span class="uname">Moderador</span></h3>
             <textarea id="intervention-text" rows="4"></textarea>
             <div class="btn-group">
                 <button onclick="submitIntervention()">Enviar e Iniciar Nuevo Ciclo</button>
@@ -200,7 +200,7 @@
         // ---------- ESTADO ----------
         function defaultState() {
             return {
-                userName: "Miche",
+                userName: "Moderador",
                 topic: "", context: "", cycle: 1, currentParticipantIndex: -1,
                 spokenThisCycle: [],
                 reinsertQueue: [],
@@ -221,19 +221,40 @@
         }
         let state = defaultState();
 
-        const savedState = localStorage.getItem('michelab_council_v4');
+        // Persistencia: clave neutral + migración no destructiva desde la clave anterior
+        const STORAGE_KEY = 'ai_council_state';
+        const LEGACY_KEYS = ['michelab_council_v4'];
+        const NAME_KEY = 'ai_council_username';
+        function rememberedName() { try { return localStorage.getItem(NAME_KEY) || ""; } catch (e) { return ""; } }
+
+        let savedState = null;
+        try {
+            savedState = localStorage.getItem(STORAGE_KEY);
+            if (!savedState) {
+                for (const k of LEGACY_KEYS) {
+                    const old = localStorage.getItem(k);
+                    if (old) {
+                        localStorage.setItem(STORAGE_KEY, old); // copia primero
+                        localStorage.removeItem(k);             // recién después se quita la vieja
+                        savedState = old; break;
+                    }
+                }
+            }
+        } catch (e) { console.warn("localStorage no disponible:", e); }
+        document.getElementById('username-input').value = rememberedName();
         if (savedState) {
             state = JSON.parse(savedState);
+            (state.messages || []).forEach(m => { if (m.type === 'miche') m.type = 'moderator'; });
             if (!Array.isArray(state.spokenThisCycle)) state.spokenThisCycle = [];
             if (!Array.isArray(state.reinsertQueue)) state.reinsertQueue = [];
             if (!Array.isArray(state.contextFiles)) state.contextFiles = [];
             if (!state.pendingAttachments || typeof state.pendingAttachments !== 'object') state.pendingAttachments = {};
             if (!state.deliveredFiles || typeof state.deliveredFiles !== 'object') state.deliveredFiles = {};
             if (!state.turnAttachments || typeof state.turnAttachments !== 'object') state.turnAttachments = {};
-            if (!state.userName) state.userName = "Miche";
+            if (!state.userName) state.userName = "Moderador";
             if (!state.summarizerId) {
-                const q = state.participants.find(p => p.id === 'qwen');
-                state.summarizerId = q ? q.id : (state.participants[0] ? state.participants[0].id : null);
+                const last = state.participants[state.participants.length - 1];
+                state.summarizerId = last ? last.id : null;
             }
             state.participants.forEach(p => { if (p.reintegratedAtMsgIndex === undefined) p.reintegratedAtMsgIndex = null; });
             document.getElementById('init-screen').classList.add('hidden');
@@ -243,7 +264,7 @@
 
         function saveState() {
             try {
-                localStorage.setItem('michelab_council_v4', JSON.stringify(state));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             } catch (e) {
                 console.warn("No se pudo guardar (cuota):", e);
                 alert("⚠️ No se pudo guardar el estado en localStorage (cuota excedida, probablemente por archivos de contexto grandes). El debate sigue en memoria: exportá .md para no perderlo.");
@@ -279,8 +300,7 @@
                 const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
             });
             if (initParticipants.includes(prev)) sel.value = prev;
-            else if (initParticipants.includes("Qwen")) sel.value = "Qwen";
-            else sel.value = initParticipants[0] || "";
+            else sel.value = initParticipants[initParticipants.length - 1] || "";
         }
         function initAddParticipant() {
             const inp = document.getElementById('init-new-participant');
@@ -332,7 +352,7 @@
             initFiles.forEach((f, i) => {
                 const row = document.createElement('div');
                 row.className = 'init-row';
-                row.innerHTML = "<span>📄 " + esc(f.name) + " <small>(como .txt)</small>" + (f.isDebateExport ? " <small style='color:var(--qwen);'>🔄 debate retomable</small>" : "") + "</span><button class='danger tiny' onclick='initRemoveFile(" + i + ")'>×</button>";
+                row.innerHTML = "<span>📄 " + esc(f.name) + " <small>(como .txt)</small>" + (f.isDebateExport ? " <small style='color:var(--summ);'>🔄 debate retomable</small>" : "") + "</span><button class='danger tiny' onclick='initRemoveFile(" + i + ")'>×</button>";
                 el.appendChild(row);
             });
         }
@@ -379,22 +399,22 @@
         }
 
         let summaryManuallyEdited = false;
-        let qwenManuallyEdited = false;
+        let cumulativeManuallyEdited = false;
         let cumulativeUpdatedCycle = 0;
         let pendingResponseCache = "";
 
         document.getElementById('summary-input').addEventListener('input', () => { summaryManuallyEdited = true; });
-        document.getElementById('qwen-summary-input').addEventListener('input', () => { qwenManuallyEdited = true; });
+        document.getElementById('cumulative-input').addEventListener('input', () => { cumulativeManuallyEdited = true; });
         document.getElementById('response-input').addEventListener('input', (e) => {
             if (!summaryManuallyEdited) document.getElementById('summary-input').value = extractSummary(e.target.value);
-            if (isSummarizerTurn() && !qwenManuallyEdited) document.getElementById('qwen-summary-input').value = extractCumulative(e.target.value);
+            if (isSummarizerTurn() && !cumulativeManuallyEdited) document.getElementById('cumulative-input').value = extractCumulative(e.target.value);
         });
 
         function resetInputs() {
             document.getElementById('response-input').value = "";
             document.getElementById('summary-input').value = "";
             summaryManuallyEdited = false;
-            qwenManuallyEdited = false;
+            cumulativeManuallyEdited = false;
         }
 
         // ---------- CONSEJO DINÁMICO ----------
@@ -442,7 +462,8 @@
 
         // ---------- FLUJO ----------
         function startDebate() {
-            const userName = document.getElementById('username-input').value.trim() || "Miche";
+            const userName = document.getElementById('username-input').value.trim() || "Moderador";
+            try { localStorage.setItem(NAME_KEY, userName); } catch (e) {}
             const topic = document.getElementById('topic-input').value.trim();
             const context = document.getElementById('context-input').value.trim();
             if (!topic) return alert("Por favor ingresa un tema.");
@@ -464,7 +485,7 @@
             state.summarizerId = sp ? sp.id : (built[0] ? built[0].id : null);
             state.contextFiles = initFiles.slice();
             state.pendingAttachments = {}; state.deliveredFiles = {}; state.turnAttachments = {};
-            state.messages.push({ sender: userName, text: "Inicia el debate sobre: " + topic, summary: "Inicia el debate sobre: " + topic, type: "miche", timestamp: now(), cycle: state.cycle });
+            state.messages.push({ sender: userName, text: "Inicia el debate sobre: " + topic, summary: "Inicia el debate sobre: " + topic, type: "moderator", timestamp: now(), cycle: state.cycle });
             // Retoma de debate desde export .md
             const resumeFile = initFiles.filter(f => f.isDebateExport).pop();
             if (resumeFile && resumeFile.parsed) {
@@ -607,13 +628,13 @@
             state.turnAttachments[currentP.id] = [];
 
             if (isSummarizerTurn()) {
-                const cum = document.getElementById('qwen-summary-input').value.trim() || extractCumulative(response);
+                const cum = document.getElementById('cumulative-input').value.trim() || extractCumulative(response);
                 if (cum) {
                     state.cumulativeSummary = cum; cumulativeUpdatedCycle = state.cycle;
                     if (cum.length > 8000) state.messages.push({ sender: "Sistema", text: "⚠️ El RESUMEN_ACUMULATIVO ya tiene " + cum.length + " caracteres. No se recortó nada, pero los prompts están creciendo: considerá pedirle al resumidor que lo condense.", type: "system", timestamp: now(), cycle: state.cycle });
                 }
-                document.getElementById('qwen-summary-input').value = "";
-                qwenManuallyEdited = false;
+                document.getElementById('cumulative-input').value = "";
+                cumulativeManuallyEdited = false;
             }
             resetInputs();
             advanceTurn();
@@ -632,7 +653,7 @@
             saveState(); renderAll();
         }
 
-        function showMicheIntervention() { closeModals(); document.getElementById('intervention-modal').style.display = 'flex'; }
+        function showModeratorIntervention() { closeModals(); document.getElementById('intervention-modal').style.display = 'flex'; }
 
         function submitIntervention() {
             const text = document.getElementById('intervention-text').value.trim();
@@ -643,7 +664,7 @@
             state.reinsertQueue = [];
             state.participants.forEach(p => { p.reintegratedAtMsgIndex = null; });
             cumulativeUpdatedCycle = 0;
-            state.messages.push({ sender: state.userName, text: text, summary: text, type: "miche", timestamp: now(), cycle: state.cycle });
+            state.messages.push({ sender: state.userName, text: text, summary: text, type: "moderator", timestamp: now(), cycle: state.cycle });
             const firstIdx = state.participants.findIndex(p => p.active);
             state.currentParticipantIndex = firstIdx !== -1 ? firstIdx : -1;
             document.getElementById('intervention-text').value = "";
@@ -661,7 +682,7 @@
                 state.reinsertQueue = state.reinsertQueue.filter(x => x !== p.id);
                 const tag = "[TAG_AUSENCIA: " + p.name + " - " + p.leftAtTime + " - Ciclo " + state.cycle + "]";
                 state.cumulativeSummary = (state.cumulativeSummary ? state.cumulativeSummary + "\n" : "") + tag;
-                state.messages.push({ sender: "Sistema", text: "⚠️ " + p.name + " ha sido deshabilitado (límite de tokens). Se agregó TAG de ausencia al resumen acumulativo.", type: "system", timestamp: now(), cycle: state.cycle });
+                state.messages.push({ sender: "Sistema", text: "⚠️ " + p.name + " quedó ausente. Se agregó TAG de ausencia al resumen acumulativo.", type: "system", timestamp: now(), cycle: state.cycle });
                 if (state.currentParticipantIndex === idx) advanceTurn();
             } else {
                 state.messages.push({ sender: "Sistema", text: "✅ " + p.name + " ha vuelto al consejo.", type: "system", timestamp: now(), cycle: state.cycle });
@@ -725,7 +746,7 @@
 
         function resetToInit() {
             closeModals();
-            localStorage.removeItem('michelab_council_v4');
+            try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
             state = defaultState();
             cumulativeUpdatedCycle = 0;
             pendingResponseCache = "";
@@ -733,8 +754,8 @@
             initFiles = [];
             renderInitParticipants(); renderInitFiles();
             resetInputs();
-            document.getElementById('qwen-summary-input').value = "";
-            document.getElementById('username-input').value = "Miche";
+            document.getElementById('cumulative-input').value = "";
+            document.getElementById('username-input').value = rememberedName();
             document.getElementById('topic-input').value = "";
             document.getElementById('context-input').value = "";
             document.getElementById('main-app').classList.add('hidden');
@@ -783,12 +804,12 @@
             state.participants.forEach(p => {
                 const div = document.createElement('div'); div.className = 'participant-item';
                 div.innerHTML = "<span>" + esc(p.name) + (!p.active ? ' <span class="status-badge status-absent">Ausente</span>' : '') + "</span>" +
-                    "<button class=\"" + (p.active ? 'danger' : 'success') + " tiny\" onclick=\"toggleParticipant('" + p.id + "')\">" + (p.active ? 'Deshabilitar' : 'Reintegrar') + "</button>";
+                    "<button class=\"" + (p.active ? 'danger' : 'success') + " tiny\" onclick=\"toggleParticipant('" + p.id + "')\">" + (p.active ? 'Marcar ausente' : 'Reintegrar') + "</button>";
                 list.appendChild(div);
             });
             document.getElementById('cycle-indicator').textContent = "Ciclo " + state.cycle;
             const sumName = summarizerName();
-            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => esc(p.name)).join(" → ") + (sumName ? ' <span style="color:var(--qwen)">(cierra: ' + esc(sumName) + ')</span>' : ' <span style="color:var(--warning)">(sin resumidor: síntesis automática)</span>');
+            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => esc(p.name)).join(" → ") + (sumName ? ' <span style="color:var(--summ)">(cierra: ' + esc(sumName) + ')</span>' : ' <span style="color:var(--warning)">(sin resumidor: síntesis automática)</span>');
         }
 
         function renderFiles() {
@@ -810,7 +831,7 @@
             const sumName = summarizerName();
             state.messages.forEach(msg => {
                 const div = document.createElement('div');
-                div.className = "message " + msg.type + (msg.sender === sumName ? ' qwen' : '');
+                div.className = "message " + msg.type + (msg.sender === sumName ? ' summarizer' : '');
                 const synth = (msg.summary && msg.type === 'llm') ? '<div class="synth">✂️ ' + esc(msg.summary) + '</div>' : '';
                 div.innerHTML = '<span class="sender">' + esc(msg.sender) + ' <small style="font-weight:normal; color:var(--text-muted)">(' + esc(msg.timestamp) + ')</small></span><div class="content">' + esc(msg.text) + '</div>' + synth;
                 c.appendChild(div);
@@ -827,7 +848,7 @@
             const p = state.participants[state.currentParticipantIndex];
             const preview = rotationPreview();
             ti.textContent = "🎤 Turno actual: " + p.name + (preview.length ? " · A continuación: " + preview.join(" → ") : " · cierra el ciclo");
-            document.getElementById('qwen-summary-section').classList.toggle('hidden', !isSummarizerTurn());
+            document.getElementById('cumulative-section').classList.toggle('hidden', !isSummarizerTurn());
             document.getElementById('summarizer-label').textContent = "📋 RESUMEN_ACUMULATIVO (auto-extraído de la respuesta de " + (summarizerName() || "el resumidor") + ", editable):";
 
             let prompt = "Contexto del proyecto: " + state.context + "\nTema del debate: " + state.topic + "\n\n";
@@ -848,7 +869,7 @@
 
             const absentees = state.participants.filter(x => !x.active);
             if (absentees.length > 0) {
-                prompt += "\n⚠️ AUSENTES por límite de tokens: " + absentees.map(a => a.name + " (desde " + a.leftAtTime + ")").join(', ') + ".\nSi mencionás algo crítico para alguno, agregá una línea \"PARA [Nombre]: ...\" (máx 1 línea c/u).\n";
+                prompt += "\n⚠️ AUSENTES: " + absentees.map(a => a.name + " (desde " + a.leftAtTime + ")").join(', ') + ".\nSi mencionás algo crítico para alguno, agregá una línea \"PARA [Nombre]: ...\" (máx 1 línea c/u).\n";
             }
 
             const attIds = (state.turnAttachments[p.id] && state.turnAttachments[p.id].length) ? state.turnAttachments[p.id] : (state.pendingAttachments[p.id] || []);
@@ -876,7 +897,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.8.1 cargado correctamente.");
+        console.log("✅ AI Council v0.8.2 cargado correctamente.");
     </script>
 </body>
 </html>

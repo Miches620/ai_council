@@ -1,4 +1,4 @@
-﻿# 🏛️ AI Council — MicheLab
+﻿# 🏛️ AI Council
 
 **Orquestador manual de debates técnicos multi-LLM. Sin APIs, sin costo, model-agnostic.**
 
@@ -19,7 +19,7 @@ colectivo del proceso.
 | **Control humano** | El moderador decide turnos, cierres, ausencias, adjuntos y conclusiones. |
 | **Resiliencia** | Los participantes pueden ser intermitentes (límites de tokens) sin romper el estado colectivo. |
 
-> Filosofía del proyecto: **evidencia antes que documentación**. La transcripción completa
+> Filosofía: **evidencia antes que documentación**. La transcripción completa
 > es la evidencia histórica; los resúmenes son contexto operativo comprimido; las
 > decisiones viven embebidas en el texto hasta que la evidencia justifique estructurarlas.
 
@@ -29,10 +29,10 @@ colectivo del proceso.
 
 1. Abrí `ai_council.html` en el navegador (Chrome/Edge/Firefox).
 2. Pantalla de setup (todo **antes** de iniciar, para que ningún ciclo arranque con integrantes o contexto incorrectos):
-   - **Nombre de Usuario** (default `Miche`), **Tema del debate**, **Contexto / Links**.
+   - **Tu nombre** como moderador (se recuerda entre sesiones), **Tema del debate**, **Contexto / Links**.
    - **Archivos de contexto** (opcionales): cualquier extensión se lee como `.txt` (tope 300 KB por archivo).
    - **Integrantes del consejo**: lista editable con defaults (ChatGPT, Meta, Gemini, Claude, Qwen); quitá, agregá LLMs o humanos.
-   - **Resumidor**: quién cierra los ciclos y genera el `RESUMEN_ACUMULATIVO` (default Qwen).
+   - **Resumidor**: quién cierra los ciclos y genera el `RESUMEN_ACUMULATIVO` (default: el último de la lista).
 3. `Iniciar Debate` → el consejo queda armado y el primer turno genera su prompt.
 4. Flujo por turno:
    - `📋 Copiar Prompt` → pegalo en el chat del LLM de turno.
@@ -102,9 +102,12 @@ colectivo del proceso.
 
 ---
 
-## Protocolo de intermitencia (ausencias por límite de tokens)
+## Protocolo de intermitencia (ausencias)
 
-1. **Deshabilitar:** se marca `Ausente`, se agrega `[TAG_AUSENCIA: Nombre - hora - Ciclo N]`
+Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve para cualquier ausencia.
+
+
+1. **Marcar ausente:** se marca `Ausente`, se agrega `[TAG_AUSENCIA: Nombre - hora - Ciclo N]`
    al acumulativo, y se notifica a todos los activos en su prompt
    (pueden dejar notas `PARA [Nombre]: ...`).
 2. **Reincorporar:** se genera un **snapshot dirigido** al ausente con: acumulativo + lo
@@ -129,7 +132,7 @@ colectivo del proceso.
 
 ## Rol resumidor configurable
 
-- Se elige en el setup (selector), con **Qwen por defecto** si está en la lista.
+- Se elige en el setup (selector); por defecto, el último integrante de la lista.
 - Toda la lógica de cierre (último del ciclo, caja de acumulativo, estilos, guards) usa
   `summarizerId`, sin hardcodeo.
 - Sin resumidor (quitado en pleno debate), los ciclos cierran con síntesis automática de respaldo.
@@ -142,7 +145,7 @@ colectivo del proceso.
   al portapapeles); opción de exportar antes de volver al inicio.
 - **Exportar .md:** transcripción completa + síntesis por mensaje + resumen acumulativo +
   archivos de contexto.
-- **Persistencia:** `localStorage` (`michelab_council_v4`) con migraciones no destructivas;
+- **Persistencia:** `localStorage` (`ai_council_state`; migra automáticamente desde la clave anterior `michelab_council_v4`) con migraciones no destructivas;
   sobrevive recargas y conserva debates en curso entre versiones. `saveState()` avisa si
   se excede la cuota (archivos grandes) y recomienda exportar como red de seguridad.
 
@@ -161,6 +164,8 @@ colectivo del proceso.
 | v0.6 | Cola de reincorporados, preview de rotación, `NOVEDADES DESDE TU REINCORPORACIÓN`, saltos protegidos. |
 | v0.7 | Setup pre-debate (integrantes + resumidor), archivos de contexto como `.txt`, adjuntos bajo demanda vía `ADJUNTAR:` sin propagar al siguiente, tope 300 KB y manejo de cuota. |
 | v0.8 | Solicitudes con nombres de archivo, adjuntos entregados una sola vez, síntesis intermedias preservadas en turnos multi-prompt, retomado de debates desde `.md` exportado, resumidor configurable (default Qwen). |
+| v0.8.1 | Seguridad y conservación: el contenido de los LLMs se muestra como texto (sin interpretar HTML), el acumulativo ya no se trunca en silencio (aviso a partir de 8000 caracteres), finalizar siempre exporta antes de borrar y "Cancelar" mantiene el debate. |
+| v0.8.2 | Neutral para uso público: sin referencias a MicheLab en la interfaz, nombre del moderador recordado, resumidor por defecto = último de la lista, textos de ausencia neutrales, clave de almacenamiento `ai_council_state` con migración automática. |
 
 ---
 
@@ -169,12 +174,12 @@ colectivo del proceso.
 - Las **decisiones** viven embebidas en texto; una capa estructurada de decisiones (estado
   consolidado vs. delta) solo se agregará cuando debates reales muestren pérdida de
   contradicciones o decisiones provisionales en la compresión.
-- Prueba de estrés real superada: debate de reconstrucción de WebMCP (3 ciclos, ausencias
+- Prueba de estrés real superada: debate técnico (3 ciclos, ausencias
   escalonadas, adjuntos encadenados y acuerdos refinados ciclo a ciclo) validó el
   protocolo, la preservación de turnos multi-prompt y el retomado desde export.
-- No se agregan features especulativas: se usa en debates reales de MicheLab y se anota
+- No se agregan features especulativas: se usa en debates reales y se anota
   qué pierden o qué sobra en los resúmenes. **Evidence primero.**
 
 ---
 
-*Uso interno MicheLab. Un solo archivo, cero dependencias, cero costo.*
+*Un solo archivo, cero dependencias, cero costo. Nacido dentro de MicheLab.*
