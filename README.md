@@ -2,7 +2,7 @@
 
 **Orquestador manual de debates técnicos multi-LLM. Sin APIs, sin costo, model-agnostic.**
 
-`michelab_council.html` es una aplicación de una sola página (HTML + JS vanilla, cero
+`ai_council.html` es una aplicación de una sola página (HTML + JS vanilla, cero
 dependencias, cero build) que permite conducir debates estructurados entre varios LLMs
 (ChatGPT, Meta, Gemini, Claude, Qwen y cualquier otro que agregues) usando sus interfaces
 de chat gratuitas mediante copy-paste. El humano modera; la interfaz mantiene el estado
@@ -27,7 +27,7 @@ colectivo del proceso.
 
 ## Arranque rápido
 
-1. Abrí `michelab_council.html` en el navegador (Chrome/Edge/Firefox).
+1. Abrí `ai_council.html` en el navegador (Chrome/Edge/Firefox).
 2. Pantalla de inicio: **Nombre de Usuario** (default `Miche`), **Tema del debate**, **Contexto / Links**.
 3. `Iniciar Debate` → el consejo queda armado y el primer turno genera su prompt.
 4. Flujo por turno:
