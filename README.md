@@ -28,11 +28,15 @@ colectivo del proceso.
 ## Arranque rápido
 
 1. Abrí `ai_council.html` en el navegador (Chrome/Edge/Firefox).
+<<<<<<< HEAD
 2. Pantalla de setup (todo **antes** de iniciar, para que ningún ciclo arranque con integrantes o contexto incorrectos):
    - **Nombre de Usuario** (default `Miche`), **Tema del debate**, **Contexto / Links**.
    - **Archivos de contexto** (opcionales): cualquier extensión se lee como `.txt` (tope 300 KB por archivo).
    - **Integrantes del consejo**: lista editable con defaults (ChatGPT, Meta, Gemini, Claude, Qwen); quitá, agregá LLMs o humanos.
    - **Resumidor**: quién cierra los ciclos y genera el `RESUMEN_ACUMULATIVO` (default Qwen).
+=======
+2. Pantalla de inicio: **Nombre de Usuario** (default `Miche`), **Tema del debate**, **Contexto / Links**.
+>>>>>>> e1b0aa59952cc4aa54ac075e94267383bf1ac27f
 3. `Iniciar Debate` → el consejo queda armado y el primer turno genera su prompt.
 4. Flujo por turno:
    - `📋 Copiar Prompt` → pegalo en el chat del LLM de turno.
