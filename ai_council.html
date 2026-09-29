@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.10</title>
+    <title>AI Council v0.11</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -59,7 +59,7 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.10</span></h1>
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.11</span></h1>
         <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
@@ -204,6 +204,19 @@
         </div>
     </div>
 
+    <div id="check-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 720px;">
+            <h3>🔎 Chequeo del RESUMEN_ACUMULATIVO</h3>
+            <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">Revisión automática, sin LLM. Los ítems marcados "posible" son heurísticos: revisalos vos.</p>
+            <ul id="check-list" style="margin: 0; padding-left: 1.2rem; font-size: 0.85rem; max-height: 300px; overflow-y: auto;"></ul>
+            <div class="btn-group" style="flex-direction: column;">
+                <button onclick="requestCorrection()">📋 Pedir corrección al resumidor (copia el prompt; su respuesta actual se conserva en la transcripción)</button>
+                <button class="secondary" onclick="editCumulativeMyself()">✏️ Editar yo el acumulativo</button>
+                <button class="secondary" onclick="saveCumulativeAnyway()">Guardar igual (los avisos se agregan al acumulativo)</button>
+            </div>
+        </div>
+    </div>
+
     <div id="file-view-modal" class="modal-overlay">
         <div class="modal" style="max-width: 800px;">
             <h3>📎 <span id="file-view-name"></span> <small style="color: var(--text-muted);">(como .txt)</small></h3>
@@ -227,6 +240,7 @@
                 summarizerId: null,
                 blindFirstCycle: false,
                 decisions: [],
+                pendingCorrection: null,
                 participants: [
                     { id: "chatgpt", name: "ChatGPT", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
                     { id: "meta", name: "Meta", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
@@ -553,6 +567,148 @@
             });
         }
 
+        // ---------- CHEQUEO DEL ACUMULATIVO (determinista, sin LLM) ----------
+        const PRESERVED_TAG_RE = /\[(?:TAG_AUSENCIA|DEBATE_RETOMADO)[^\]]*\]/g;
+        const CHECK_STOP = new Set('porque tambien debemos debe deben entre sobre antes despues donde cuando mientras desde hasta contra ademas siempre todavia propone propuso plantea identifica confirma refuerza define detecta prioriza sugiere senala insiste coincide participante respuesta postura'.split(' '));
+        function normTxt(t) { return String(t || "").toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+        function keywords(t) { return [...new Set((normTxt(t).match(/[a-z0-9_.]{6,}/g) || []).map(w => w.replace(/\.+$/, "")))].filter(w => w.length >= 6 && !CHECK_STOP.has(w)); }
+        function stripCumulative(t) { return String(t || "").split(/RESUMEN_ACUMULATIVO/i)[0]; }
+        function knownNames() {
+            const n = new Set(state.participants.map(p => p.name));
+            state.messages.forEach(m => { if (m.type === 'llm' || m.type === 'moderator') n.add(m.sender); });
+            return [...n];
+        }
+        function textOf(name, cycle, pendingText) {
+            let t = state.messages.filter(m => m.cycle === cycle && m.sender === name && (m.type === 'llm' || m.type === 'moderator'))
+                .map(m => stripCumulative(m.text) + "\n" + (m.summary || "")).join("\n");
+            if (pendingText) t += "\n" + stripCumulative(pendingText);
+            // El moderador también "dice" el tema y el contexto del debate (el resumidor los recibe en cada prompt)
+            if (name === state.userName) t += "\n" + state.topic + "\n" + state.context;
+            return t;
+        }
+        function spokeIn(name, cycle, pendingText) { return textOf(name, cycle, pendingText).trim().length > 0; }
+
+        // Devuelve { issues: [...], fixedCum } — fixedCum trae de vuelta los TAGs que el resumidor perdió.
+        function checkCumulative(cum, summarizerName, pendingResponse) {
+            const issues = [];
+            const names = knownNames();
+            const cur = state.cycle;
+            const resumed = /DEBATE_RETOMADO/.test(state.cumulativeSummary || "");
+            const pendingFor = (n, c) => (n === summarizerName && c === cur) ? pendingResponse : "";
+
+            // (4) TAGs preservados
+            const prevTags = (state.cumulativeSummary || "").match(PRESERVED_TAG_RE) || [];
+            const lostTags = [...new Set(prevTags)].filter(t => !cum.includes(t));
+            let fixedCum = cum;
+            if (lostTags.length) fixedCum += "\n" + lostTags.join("\n");
+
+            const lines = cum.split("\n");
+            let ctx = null; // { cycle, indent }
+            const mentionedCycles = new Set();
+            lines.forEach(raw => {
+                const indent = raw.match(/^\s*/)[0].length;
+                const clean = raw.replace(/[*_#>`]/g, "").replace(/^\s*[-•]\s*/, "").trim();
+                const hm = clean.match(/^ciclo\s*(\d+)\s*(.*)$/i);
+                if (hm) {
+                    const n = parseInt(hm[1], 10);
+                    mentionedCycles.add(n);
+                    // (2) ciclos que todavía no ocurrieron / "Actual" mal rotulado
+                    if (n > cur) issues.push("Menciona el \"Ciclo " + n + "\", pero el ciclo actual es el " + cur + ".");
+                    else if (/actual/i.test(hm[2]) && n !== cur) issues.push("Rotula como \"actual\" al Ciclo " + n + ", pero el actual es el " + cur + ".");
+                    ctx = { cycle: n, indent: indent };
+                    return;
+                }
+                if (ctx && clean && indent <= ctx.indent) ctx = null;
+                if (!ctx || !clean) return;
+                const who = names.find(n => { const c = normTxt(clean), nn = normTxt(n); return c.startsWith(nn) && /^[\s:(\-–—]/.test(c.slice(nn.length)); });
+                if (!who) return;
+                if (resumed && ctx.cycle !== cur) return; // en debates retomados, los ciclos viejos no son verificables
+                if (ctx.cycle > cur) return;
+                // (1) atribución a alguien que no habló en ese ciclo
+                if (!spokeIn(who, ctx.cycle, pendingFor(who, ctx.cycle))) {
+                    issues.push("Le atribuye algo a " + who + " en el Ciclo " + ctx.cycle + ", pero " + who + " no tiene mensajes en ese ciclo: \"" + clean.slice(0, 140) + "\"");
+                    return;
+                }
+                // (1b) posible atribución sin respaldo (heurística por palabras clave)
+                const claim = clean.slice(who.length).replace(/^[\s:(\-–—]+/, "");
+                const kw = keywords(claim);
+                if (kw.length >= 4) {
+                    const have = new Set((normTxt(textOf(who, ctx.cycle, pendingFor(who, ctx.cycle))).match(/[a-z0-9_.]{4,}/g) || []).map(w => w.slice(0, 6)));
+                    const miss = kw.filter(w => !have.has(w.slice(0, 6)));
+                    if (miss.length >= 3 && miss.length / kw.length >= 0.4)
+                        issues.push("Posible atribución sin respaldo a " + who + " (Ciclo " + ctx.cycle + "): estas palabras no aparecen en lo que dijo — " + miss.join(", ") + ". Línea: \"" + clean.slice(0, 140) + "\"");
+                }
+            });
+
+            // (3) quienes hablaron en el ciclo actual y no figuran
+            const speakers = [...new Set(state.messages.filter(m => m.cycle === cur && m.type === 'llm').map(m => m.sender))];
+            if (summarizerName && !speakers.includes(summarizerName)) speakers.push(summarizerName);
+            const ncum = normTxt(cum);
+            speakers.forEach(n => { if (!ncum.includes(normTxt(n))) issues.push(n + " habló en el Ciclo " + cur + " y no figura en el acumulativo."); });
+            if (!mentionedCycles.has(cur)) issues.push("No hay una sección para el Ciclo " + cur + " (el actual).");
+
+            // (5) "Decisiones tomadas" y propuestas inexistentes
+            if (lines.some(l => /^decisiones\s+tomadas/i.test(l.replace(/[*_#>`]/g, "").replace(/^\s*[-•]\s*/, "").trim())))
+                issues.push("Incluye una sección \"Decisiones tomadas\": las decisiones las registra la interfaz y solo el moderador acuerda.");
+            const ids = [...new Set((cum.match(/\bD\d+\b/g) || []))];
+            ids.filter(id => !findDecision(id)).forEach(id => issues.push("Menciona " + id + ", que no existe en el registro de decisiones."));
+
+            return { issues: issues, lostTags: lostTags, fixedCum: fixedCum };
+        }
+
+        let pendingCheck = null; // { response, cum, issues }
+
+        function showCheckModal(issues) {
+            const ul = document.getElementById('check-list'); ul.innerHTML = "";
+            issues.forEach(i => { const li = document.createElement('li'); li.textContent = i; li.style.marginBottom = "0.4rem"; ul.appendChild(li); });
+            document.getElementById('check-modal').style.display = 'flex';
+        }
+
+        function requestCorrection() {
+            closeModals();
+            if (!pendingCheck) return;
+            const p = state.participants[state.currentParticipantIndex];
+            const r = pendingCheck.response;
+            const summary = document.getElementById('summary-input').value.trim() || extractSummary(r);
+            // Conservar: la respuesta con problemas queda en la transcripción como intermedia
+            state.messages.push({ sender: p.name, text: r, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle, intermediate: true });
+            processLedgerMarkers(r, p.name);
+            const prompt = "Tu RESUMEN_ACUMULATIVO tiene problemas detectados por un chequeo automático (sin LLM) de la interfaz:\n" +
+                pendingCheck.issues.map(i => "- " + i).join("\n") +
+                "\n\nCorregilo contra la transcripción: no atribuyas a nadie algo que no dijo, respetá la numeración de ciclos (el actual es el " + state.cycle + ") y no declares decisiones (referite a las propuestas por número D#)." +
+                "\n\nRespondé SOLO con una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" corregida y completa, y al final una línea \"RESUMEN:\" (máx 2 líneas). Tu opinión técnica ya quedó registrada, no hace falta repetirla." +
+                "\n\n## TU RESUMEN_ACUMULATIVO ANTERIOR (para corregir):\n" + pendingCheck.cum;
+            state.pendingCorrection = { pid: p.id, prompt: prompt };
+            sysMsg("🔎 Chequeo del acumulativo de " + p.name + ": " + pendingCheck.issues.length + " problema(s). Se pidió corrección; la respuesta original quedó en la transcripción.");
+            pendingCheck = null;
+            resetInputs();
+            document.getElementById('cumulative-input').value = ""; cumulativeManuallyEdited = false;
+            saveState(); renderAll();
+            navigator.clipboard.writeText(prompt).catch(() => {});
+            alert("Prompt de corrección copiado (también está en el recuadro). Pegáselo a " + p.name + " y pegá acá su respuesta.");
+        }
+
+        function editCumulativeMyself() {
+            closeModals();
+            const box = document.getElementById('cumulative-input');
+            if (pendingCheck && !box.value.trim()) box.value = pendingCheck.cum;
+            cumulativeManuallyEdited = true;
+            pendingCheck = null;
+            box.focus();
+        }
+
+        function saveCumulativeAnyway() {
+            closeModals();
+            if (!pendingCheck) return;
+            const block = "\n\n⚠️ AVISOS DEL CHEQUEO AUTOMÁTICO (Ciclo " + state.cycle + "; el moderador guardó este resumen igual — tomalo con cautela):\n" + pendingCheck.issues.map(i => "- " + i).join("\n");
+            document.getElementById('cumulative-input').value = pendingCheck.cum + block;
+            cumulativeManuallyEdited = true;
+            const r = pendingCheck.response; const n = pendingCheck.issues.length;
+            pendingCheck = null;
+            sysMsg("🔎 El acumulativo se guardó con " + n + " aviso(s) del chequeo, agregados al propio resumen.");
+            finishSubmitResponse(r, { skipCheck: true });
+        }
+
         // ---------- EXTRACCIÓN ----------
         function isRequestLine(l) { return /^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:/i.test(l) || isLedgerLine(l); }
 
@@ -814,7 +970,25 @@
             alert("Prompt regenerado con: " + names.join(", ") + ". Copialo y pegalo nuevamente al LLM; luego pegá acá su respuesta completa.");
         }
 
-        function finishSubmitResponse(response) {
+        function finishSubmitResponse(response, opts) {
+            opts = opts || {};
+            if (isSummarizerTurn()) {
+                const box = document.getElementById('cumulative-input');
+                let cum = box.value.trim() || extractCumulative(response);
+                if (cum) {
+                    const res = checkCumulative(cum, state.participants[state.currentParticipantIndex].name, response);
+                    if (res.lostTags.length) {
+                        box.value = res.fixedCum; cumulativeManuallyEdited = true; cum = res.fixedCum;
+                        sysMsg("🏷️ El resumidor omitió " + res.lostTags.length + " TAG(s); se volvieron a agregar solos: " + res.lostTags.join(" "));
+                    }
+                    if (!opts.skipCheck && res.issues.length) {
+                        pendingCheck = { response: response, cum: cum, issues: res.issues };
+                        saveState(); renderChat();
+                        showCheckModal(res.issues);
+                        return;
+                    }
+                }
+            }
             const summary = document.getElementById('summary-input').value.trim() || extractSummary(response);
             const currentP = state.participants[state.currentParticipantIndex];
             state.messages.push({ sender: currentP.name, text: response, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle });
@@ -825,6 +999,7 @@
             state.deliveredFiles[currentP.id] = unionArr(state.deliveredFiles[currentP.id], state.pendingAttachments[currentP.id]);
             state.pendingAttachments[currentP.id] = [];
             state.turnAttachments[currentP.id] = [];
+            if (state.pendingCorrection && state.pendingCorrection.pid === currentP.id) state.pendingCorrection = null;
 
             if (isSummarizerTurn()) {
                 const cum = document.getElementById('cumulative-input').value.trim() || extractCumulative(response);
@@ -1116,6 +1291,11 @@
                 prompt += "\nTu turno, " + p.name + ". Respondé al último punto con tu opinión técnica.\n";
             }
             prompt += "\n## INSTRUCCIÓN OBLIGATORIA: Terminá tu respuesta con una línea que empiece con \"RESUMEN:\" seguida de máx 2 líneas sintetizando tu postura.";
+            if (state.pendingCorrection && state.pendingCorrection.pid === p.id) {
+                pd.textContent = state.pendingCorrection.prompt;
+                ti.textContent = "✏️ Corrección pendiente: " + p.name + " tiene que corregir su RESUMEN_ACUMULATIVO (prompt de corrección abajo).";
+                return;
+            }
             pd.textContent = prompt;
         }
 
@@ -1128,7 +1308,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.10 cargado correctamente.");
+        console.log("✅ AI Council v0.11 cargado correctamente.");
     </script>
 </body>
 </html>

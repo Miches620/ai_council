@@ -103,6 +103,23 @@ viaja en cada prompt, en los snapshots de reincorporación, en el prompt de cier
 - Si el resumidor no cierra (ausente), la interfaz compone una **síntesis automática de
   respaldo** desde la cadena del ciclo.
 
+### Chequeo del acumulativo (sin LLM)
+Antes de guardar el `RESUMEN_ACUMULATIVO`, la interfaz lo contrasta con la transcripción:
+
+1. **Atribuciones imposibles:** algo atribuido a alguien en un ciclo donde no tiene mensajes.
+2. **Atribuciones posiblemente sin respaldo** (heurística): si ≥40 % de las palabras clave de
+   la línea (y al menos 3) no aparecen en lo que esa persona dijo en ese ciclo. Calibrada con un
+   debate real: detectó una propuesta inventada ("Máquina de Estados Finita") sin marcar las
+   atribuciones legítimas.
+3. **Ciclos inexistentes** o rotulados como "actual" cuando no lo son.
+4. **Omisiones:** quien habló en el ciclo actual y no figura; ciclo actual sin sección.
+5. **Decisiones:** sección "Decisiones tomadas" o referencias a `D#` inexistentes.
+
+Los **TAGs** de ausencia y de retomado que el resumidor pierda se **vuelven a agregar solos**.
+Si hay problemas, un modal ofrece: **pedir corrección al resumidor** (prompt listo en la misma
+vuelta; su respuesta original queda en la transcripción), **editar vos**, o **guardar igual**
+(los avisos se agregan al propio acumulativo, para que el resto de los LLM sepa qué está en duda).
+
 ### Turnos multi-prompt (preservación)
 - Si un LLM solicita archivos y el prompt se regenera en la misma vuelta, la **respuesta
   intermedia y su síntesis se preservan** como mensaje propio en la transcripción y en la
@@ -206,6 +223,7 @@ Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve p
 | v0.8.2 | Neutral para uso público: sin referencias a MicheLab en la interfaz, nombre del moderador recordado, resumidor por defecto = último de la lista, textos de ausencia neutrales, clave de almacenamiento `ai_council_state` con migración automática. |
 | v0.9 | Primera vuelta a ciegas (opcional, activada por defecto): Ciclo 1 sin ver al resto, Ciclo 2 con las posturas ciegas tal cual y pedido explícito de desacuerdos. |
 | v0.10 | Registro de decisiones: `PROPONGO` / `APOYO` / `OBJETO` con motivo; estados PROPUESTA, DISPUTADA, ACORDADA, RECHAZADA y REEMPLAZADA; solo el moderador resuelve, con constancia de objeciones y silencios; restauración exacta al retomar. |
+| v0.11 | Chequeo determinista del acumulativo: atribuciones imposibles o sin respaldo, ciclos inexistentes, omisiones, "Decisiones tomadas" y `D#` inexistentes; TAGs perdidos re-agregados; prompt de corrección para el resumidor. |
 
 ---
 
