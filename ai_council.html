@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.6</title>
+    <title>AI Council v0.8</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -26,7 +26,7 @@
         .message .synth { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.8rem; color: var(--qwen); }
         .controls { background-color: var(--panel); border-top: 1px solid var(--border); padding: 1rem; border-radius: 8px; }
         .prompt-box { background-color: #0f172a; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem; max-height: 200px; overflow-y: auto; color: #cbd5e1; }
-        textarea, input { width: 100%; background-color: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; box-sizing: border-box; font-family: inherit; }
+        textarea, input, select { width: 100%; background-color: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; box-sizing: border-box; font-family: inherit; }
         button { background-color: var(--primary); color: white; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; }
         button:hover { opacity: 0.9; }
         button.secondary { background-color: #475569; }
@@ -41,17 +41,38 @@
         .status-absent { background: var(--danger); color: white; }
         .hidden { display: none !important; }
         .summary-section { background: #1a1a2e; border: 1px solid var(--qwen); border-radius: 4px; padding: 0.5rem; }
+        .files-section { background: #1a2e1a; border: 1px solid var(--primary); border-radius: 4px; padding: 0.5rem; }
         label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--qwen); font-weight: bold; }
+        .init-box { width: 420px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+        .init-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border-radius: 4px; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
     </style>
 </head>
 <body>
 
     <!-- Pantalla de Inicio -->
-    <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 1rem;">
-        <h1>🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.6</span></h1>
-        <input type="text" id="username-input" value="Miche" placeholder="Nombre de Usuario" style="width: 400px;">
-        <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 400px;">
-        <input type="text" id="context-input" placeholder="Contexto / Links" style="width: 400px;">
+    <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.8</span></h1>
+        <input type="text" id="username-input" value="Miche" placeholder="Nombre de Usuario" style="width: 420px;">
+        <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
+        <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
+
+        <div class="init-box">
+            <strong>📎 Archivos de contexto (opcionales — cualquier extensión se lee como .txt)</strong>
+            <input type="file" id="file-input" multiple onchange="handleFileInput(event)" style="font-size: 0.8rem;">
+            <div id="init-files-list" style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.3rem;"></div>
+        </div>
+
+        <div class="init-box">
+            <strong>👥 Integrantes del consejo (editá antes de iniciar)</strong>
+            <div id="init-participants-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="init-new-participant" placeholder="Nombre (LLM o humano)">
+                <button class="secondary" onclick="initAddParticipant()">+ Agregar</button>
+            </div>
+            <label class="mini" style="margin-top: 0.5rem;">🧠 Quién cierra los ciclos y genera el RESUMEN_ACUMULATIVO:</label>
+            <select id="init-summarizer"></select>
+        </div>
+
         <button onclick="startDebate()">Iniciar Debate</button>
     </div>
 
@@ -75,14 +96,18 @@
                     <button class="secondary tiny" onclick="removeParticipant()" title="Quitar participante">−</button>
                 </h3>
                 <div id="participants-list"></div>
+                <div id="files-section" class="files-section hidden">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">📎 Archivos de contexto</h4>
+                    <div id="files-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
+                </div>
                 <div class="summary-section">
                     <h4 style="margin: 0 0 0.5rem 0; color: var(--qwen);">📋 Resumen Acumulativo</h4>
                     <div id="cumulative-summary-preview" style="font-size: 0.8rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: var(--text-muted);">Aún no se generó resumen.</div>
                 </div>
                 <div id="aside-tips" style="margin-top: auto; font-size: 0.8rem; color: var(--text-muted);">
                     <div id="order-line"></div><br>
-                    💡 El ciclo cierra recién cuando <strong>todos los activos</strong> opinaron y Qwen generó el acumulativo.<br><br>
-                    💡 Un reincorporado habla inmediatamente después del hablante actual, y su prompt incluye las novedades posteriores a su snapshot.
+                    💡 El ciclo cierra recién cuando <strong>todos los activos</strong> opinaron y el resumidor generó el acumulativo.<br><br>
+                    💡 Los adjuntos se envían una sola vez por LLM; los pedidos nuevos viajan solos en la siguiente regeneración.
                 </div>
             </aside>
 
@@ -98,7 +123,7 @@
                     <label class="mini">✂️ Resumen sintético (auto-extraído, editable). Es lo único que verá el próximo LLM:</label>
                     <textarea id="summary-input" rows="2" placeholder="Se autocompleta al pegar la respuesta..."></textarea>
                     <div id="qwen-summary-section" class="hidden">
-                        <label class="mini">📋 RESUMEN_ACUMULATIVO (auto-extraído de la respuesta de Qwen, editable):</label>
+                        <label class="mini" id="summarizer-label">📋 RESUMEN_ACUMULATIVO (auto-extraído, editable):</label>
                         <textarea id="qwen-summary-input" rows="6"></textarea>
                     </div>
                     <div class="btn-group"><button onclick="submitResponse()">Guardar Respuesta y Continuar ➡️</button></div>
@@ -107,11 +132,11 @@
         </div>
     </div>
 
-    <!-- Modal Fin de Ciclo -->
+    <!-- Modales -->
     <div id="cycle-modal" class="modal-overlay">
         <div class="modal">
             <h3>🔄 Ciclo Completado</h3>
-            <p>Todos los LLMs activos hablaron en este ciclo y Qwen cerró con el acumulativo.</p>
+            <p>Todos los LLMs activos hablaron en este ciclo y el resumidor cerró con el acumulativo.</p>
             <div class="btn-group" style="flex-direction: column;">
                 <button onclick="startNextCycle()">Continuar al Ciclo Siguiente ➡️</button>
                 <button class="secondary" onclick="showMicheIntervention()">✋ Intervenir como <span class="uname">Miche</span></button>
@@ -119,7 +144,6 @@
         </div>
     </div>
 
-    <!-- Modal Intervención -->
     <div id="intervention-modal" class="modal-overlay">
         <div class="modal">
             <h3>✋ Intervención de <span class="uname">Miche</span></h3>
@@ -131,7 +155,6 @@
         </div>
     </div>
 
-    <!-- Modal Finalizar -->
     <div id="finalize-modal" class="modal-overlay">
         <div class="modal">
             <h3>🏁 Finalizar Debate</h3>
@@ -141,7 +164,6 @@
         </div>
     </div>
 
-    <!-- Modal Reincorporación -->
     <div id="reintegration-modal" class="modal-overlay">
         <div class="modal" style="max-width: 700px;">
             <h3>🔄 Reincorporación de <span id="reintegration-name"></span></h3>
@@ -154,6 +176,26 @@
         </div>
     </div>
 
+    <div id="attach-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>📎 Solicitud de archivos detectada</h3>
+            <p id="attach-modal-text"></p>
+            <div class="btn-group" style="flex-direction: column;">
+                <button onclick="regenerateWithAttachments()">📎 Regenerar prompt AHORA con el adjunto (misma vuelta, preserva síntesis)</button>
+                <button class="secondary" onclick="saveAndContinuePending()">Guardar respuesta y continuar (el adjunto irá en su próximo turno)</button>
+                <button class="secondary" onclick="closeModals()">Cancelar (volver al recuadro)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="file-view-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 800px;">
+            <h3>📎 <span id="file-view-name"></span> <small style="color: var(--text-muted);">(como .txt)</small></h3>
+            <textarea id="file-view-content" rows="16" readonly style="font-family: monospace; font-size: 0.8rem;"></textarea>
+            <button class="secondary" onclick="closeModals()">Cerrar</button>
+        </div>
+    </div>
+
     <script>
         // ---------- ESTADO ----------
         function defaultState() {
@@ -162,6 +204,11 @@
                 topic: "", context: "", cycle: 1, currentParticipantIndex: -1,
                 spokenThisCycle: [],
                 reinsertQueue: [],
+                contextFiles: [],
+                pendingAttachments: {},
+                deliveredFiles: {},
+                turnAttachments: {},
+                summarizerId: null,
                 participants: [
                     { id: "chatgpt", name: "ChatGPT", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
                     { id: "meta", name: "Meta", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
@@ -177,21 +224,124 @@
         const savedState = localStorage.getItem('michelab_council_v4');
         if (savedState) {
             state = JSON.parse(savedState);
-            // Migración no destructiva: conserva el debate vivo
             if (!Array.isArray(state.spokenThisCycle)) state.spokenThisCycle = [];
             if (!Array.isArray(state.reinsertQueue)) state.reinsertQueue = [];
+            if (!Array.isArray(state.contextFiles)) state.contextFiles = [];
+            if (!state.pendingAttachments || typeof state.pendingAttachments !== 'object') state.pendingAttachments = {};
+            if (!state.deliveredFiles || typeof state.deliveredFiles !== 'object') state.deliveredFiles = {};
+            if (!state.turnAttachments || typeof state.turnAttachments !== 'object') state.turnAttachments = {};
             if (!state.userName) state.userName = "Miche";
+            if (!state.summarizerId) {
+                const q = state.participants.find(p => p.id === 'qwen');
+                state.summarizerId = q ? q.id : (state.participants[0] ? state.participants[0].id : null);
+            }
             state.participants.forEach(p => { if (p.reintegratedAtMsgIndex === undefined) p.reintegratedAtMsgIndex = null; });
             document.getElementById('init-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             renderAll();
         }
 
-        function saveState() { localStorage.setItem('michelab_council_v4', JSON.stringify(state)); }
+        function saveState() {
+            try {
+                localStorage.setItem('michelab_council_v4', JSON.stringify(state));
+            } catch (e) {
+                console.warn("No se pudo guardar (cuota):", e);
+                alert("⚠️ No se pudo guardar el estado en localStorage (cuota excedida, probablemente por archivos de contexto grandes). El debate sigue en memoria: exportá .md para no perderlo.");
+            }
+        }
         function now() { return new Date().toLocaleTimeString(); }
         function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "p"; }
+        function unionArr(a, b) { const s = (a || []).slice(); (b || []).forEach(x => { if (!s.includes(x)) s.push(x); }); return s; }
+        function summarizerName() { const p = state.participants.find(x => x.id === state.summarizerId); return p ? p.name : null; }
+        function fileName(id) { const f = state.contextFiles.find(x => x.id === id); return f ? f.name : null; }
 
-        // ---------- EXTRACCIÓN DE RESÚMENES ----------
+        // ---------- EDITOR PRE-DEBATE ----------
+        let initParticipants = ["ChatGPT", "Meta", "Gemini", "Claude", "Qwen"];
+        let initFiles = [];
+
+        function renderInitParticipants() {
+            const el = document.getElementById('init-participants-list');
+            el.innerHTML = "";
+            initParticipants.forEach((n, i) => {
+                const row = document.createElement('div');
+                row.className = 'init-row';
+                row.innerHTML = "<span>" + n + "</span><button class='danger tiny' onclick='initRemoveParticipant(" + i + ")'>×</button>";
+                el.appendChild(row);
+            });
+            renderInitSummarizer();
+        }
+        function renderInitSummarizer() {
+            const sel = document.getElementById('init-summarizer');
+            const prev = sel.value;
+            sel.innerHTML = "";
+            initParticipants.forEach(n => {
+                const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+            });
+            if (initParticipants.includes(prev)) sel.value = prev;
+            else if (initParticipants.includes("Qwen")) sel.value = "Qwen";
+            else sel.value = initParticipants[0] || "";
+        }
+        function initAddParticipant() {
+            const inp = document.getElementById('init-new-participant');
+            const name = inp.value.trim();
+            if (!name) return;
+            if (initParticipants.some(n => n.toLowerCase() === name.toLowerCase())) return alert("Ese integrante ya está en la lista.");
+            initParticipants.push(name);
+            inp.value = "";
+            renderInitParticipants();
+        }
+        function initRemoveParticipant(i) {
+            if (initParticipants.length <= 1) return alert("El consejo necesita al menos 1 integrante.");
+            initParticipants.splice(i, 1);
+            renderInitParticipants();
+        }
+
+        function parseDebateExport(content) {
+            if (!/#\s*🏛️\s*(MicheLab )?AI Council - Debate/.test(content)) return null;
+            const topicM = content.match(/\*\*Tema:\*\*\s*(.+)/);
+            const cumM = content.match(/## 📋 Resumen Acumulativo\n([\s\S]*?)(\n---|\n## 💬)/);
+            if (!cumM) return null;
+            return { topic: topicM ? topicM[1].trim() : "", cumulative: cumM[1].trim() };
+        }
+
+        function handleFileInput(evt) {
+            const files = Array.from(evt.target.files || []);
+            files.forEach(file => {
+                if (file.size > 300000) { alert("⚠️ \"" + file.name + "\" supera los 300 KB y se omitió (cuota de localStorage)."); return; }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const content = String(reader.result || "");
+                    const f = { id: "f" + Date.now() + "_" + Math.floor(Math.random() * 10000), name: file.name, content: content, isDebateExport: false, parsed: null };
+                    const parsed = parseDebateExport(content);
+                    if (parsed) {
+                        f.isDebateExport = true; f.parsed = parsed;
+                        const topicInp = document.getElementById('topic-input');
+                        if (!topicInp.value.trim() && parsed.topic) topicInp.value = parsed.topic;
+                    }
+                    initFiles.push(f);
+                    renderInitFiles();
+                };
+                reader.readAsText(file);
+            });
+            evt.target.value = "";
+        }
+        function renderInitFiles() {
+            const el = document.getElementById('init-files-list');
+            el.innerHTML = "";
+            initFiles.forEach((f, i) => {
+                const row = document.createElement('div');
+                row.className = 'init-row';
+                row.innerHTML = "<span>📄 " + f.name + " <small>(como .txt)</small>" + (f.isDebateExport ? " <small style='color:var(--qwen);'>🔄 debate retomable</small>" : "") + "</span><button class='danger tiny' onclick='initRemoveFile(" + i + ")'>×</button>";
+                el.appendChild(row);
+            });
+        }
+        function initRemoveFile(i) { initFiles.splice(i, 1); renderInitFiles(); }
+        renderInitParticipants();
+        renderInitFiles();
+
+        // ---------- EXTRACCIÓN ----------
+        function isRequestLine(l) { return /^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:/i.test(l); }
+
         function extractSummary(text) {
             if (!text || !text.trim()) return "";
             const lines = text.split("\n").map(l => l.trim());
@@ -200,8 +350,8 @@
                 if (/^(resumen|síntesis|sintesis|tl;dr|en resumen)\s*:/i.test(lines[i])) { idx = i; break; }
             }
             let out;
-            if (idx !== -1) out = lines.slice(idx).filter(l => l).join(" ");
-            else out = lines.filter(l => l).slice(-2).join(" ");
+            if (idx !== -1) out = lines.slice(idx).filter(l => l && !isRequestLine(l)).join(" ");
+            else out = lines.filter(l => l && !isRequestLine(l)).slice(-2).join(" ");
             return out.slice(0, 600);
         }
 
@@ -217,15 +367,25 @@
             return lines.slice(start, end).join("\n").trim().slice(0, 4000);
         }
 
+        function detectFileRequests(text) {
+            const names = [];
+            text.split("\n").forEach(l => {
+                const m = l.match(/^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:\s*(.+)$/i);
+                if (m) m[2].split(",").forEach(part => { const n = part.trim(); if (n) names.push(n); });
+            });
+            return names.filter(n => state.contextFiles.some(f => f.name.toLowerCase() === n.toLowerCase()));
+        }
+
         let summaryManuallyEdited = false;
         let qwenManuallyEdited = false;
         let cumulativeUpdatedCycle = 0;
+        let pendingResponseCache = "";
 
         document.getElementById('summary-input').addEventListener('input', () => { summaryManuallyEdited = true; });
         document.getElementById('qwen-summary-input').addEventListener('input', () => { qwenManuallyEdited = true; });
         document.getElementById('response-input').addEventListener('input', (e) => {
             if (!summaryManuallyEdited) document.getElementById('summary-input').value = extractSummary(e.target.value);
-            if (isQwenTurn() && !qwenManuallyEdited) document.getElementById('qwen-summary-input').value = extractCumulative(e.target.value);
+            if (isSummarizerTurn() && !qwenManuallyEdited) document.getElementById('qwen-summary-input').value = extractCumulative(e.target.value);
         });
 
         function resetInputs() {
@@ -261,11 +421,14 @@
             }
             if (idx === -1) return alert("No encontré ese participante.");
             const p = state.participants[idx];
-            if (p.id === 'qwen' && !confirm("Qwen es quien cierra el ciclo con el RESUMEN_ACUMULATIVO. Sin él, la interfaz generará una síntesis automática al cierre. ¿Continuar?")) return;
+            if (p.id === state.summarizerId && !confirm(p.name + " es quien cierra el ciclo con el RESUMEN_ACUMULATIVO. Sin él/ella, la interfaz generará una síntesis automática al cierre. ¿Continuar?")) return;
             const wasCurrent = state.currentParticipantIndex === idx;
             state.participants.splice(idx, 1);
             state.spokenThisCycle = state.spokenThisCycle.filter(id => id !== p.id);
             state.reinsertQueue = state.reinsertQueue.filter(id => id !== p.id);
+            delete state.pendingAttachments[p.id];
+            delete state.turnAttachments[p.id];
+            if (state.summarizerId === p.id) state.summarizerId = null;
             if (wasCurrent) {
                 state.currentParticipantIndex = Math.min(idx, state.participants.length) - 1;
                 advanceTurn();
@@ -281,9 +444,31 @@
             const topic = document.getElementById('topic-input').value.trim();
             const context = document.getElementById('context-input').value.trim();
             if (!topic) return alert("Por favor ingresa un tema.");
+            if (initParticipants.length < 1) return alert("El consejo necesita al menos 1 integrante.");
             state.userName = userName;
             state.topic = topic; state.context = context;
+            const built = [];
+            initParticipants.forEach(n => {
+                let id = slug(n);
+                if (built.some(p => p.id === id)) {
+                    let k = 2; while (built.some(p => p.id === id + "-" + k)) k++;
+                    id = id + "-" + k;
+                }
+                built.push({ id: id, name: n, active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null });
+            });
+            state.participants = built;
+            const selName = document.getElementById('init-summarizer').value;
+            const sp = built.find(p => p.name === selName);
+            state.summarizerId = sp ? sp.id : (built[0] ? built[0].id : null);
+            state.contextFiles = initFiles.slice();
+            state.pendingAttachments = {}; state.deliveredFiles = {}; state.turnAttachments = {};
             state.messages.push({ sender: userName, text: "Inicia el debate sobre: " + topic, summary: "Inicia el debate sobre: " + topic, type: "miche", timestamp: now(), cycle: state.cycle });
+            // Retoma de debate desde export .md
+            const resumeFile = initFiles.filter(f => f.isDebateExport).pop();
+            if (resumeFile && resumeFile.parsed) {
+                state.cumulativeSummary = resumeFile.parsed.cumulative + "\n[DEBATE_RETOMADO desde " + resumeFile.name + "]";
+                state.messages.push({ sender: "Sistema", text: "🔄 Debate retomado desde \"" + resumeFile.name + "\": el Resumen Acumulativo del debate anterior se cargó como contexto.", type: "system", timestamp: now(), cycle: state.cycle });
+            }
             document.getElementById('init-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             const firstIdx = state.participants.findIndex(p => p.active);
@@ -296,15 +481,13 @@
         }
 
         function pickNext(startIdx, pending, queue) {
-            // 1) Reincorporados en espera (cola FIFO)
             if (queue && queue.length) {
                 for (const id of queue) {
                     const i = state.participants.findIndex(p => p.id === id);
                     if (i !== -1 && pending.some(p => p.id === id)) return i;
                 }
             }
-            // 2) Rotación natural; Qwen cierra
-            let pool = pending.filter(p => p.id !== 'qwen');
+            let pool = pending.filter(p => p.id !== state.summarizerId);
             if (pool.length === 0) pool = pending;
             for (let step = 1; step <= state.participants.length; step++) {
                 const i = (startIdx + step) % state.participants.length;
@@ -327,7 +510,6 @@
             state.currentParticipantIndex = pickNext(state.currentParticipantIndex, pending, state.reinsertQueue);
         }
 
-        // Simula la rotación restante SIN mutar el estado (para el cartel "A continuación")
         function rotationPreview() {
             const spoken = state.spokenThisCycle.slice();
             const cur = state.participants[state.currentParticipantIndex];
@@ -348,22 +530,81 @@
             return names;
         }
 
-        function isQwenTurn() {
+        function isSummarizerTurn() {
             const p = state.participants[state.currentParticipantIndex];
-            return p && p.id === 'qwen';
+            return p && p.id === state.summarizerId;
         }
 
         function submitResponse() {
             const response = document.getElementById('response-input').value.trim();
             if (!response) return alert("Pega la respuesta del LLM primero.");
+            const currentP = state.participants[state.currentParticipantIndex];
+            const reqNames = detectFileRequests(response);
+            if (reqNames.length) {
+                if (!Array.isArray(state.pendingAttachments[currentP.id])) state.pendingAttachments[currentP.id] = [];
+                const added = [], already = [];
+                reqNames.forEach(n => {
+                    const f = state.contextFiles.find(x => x.name.toLowerCase() === n.toLowerCase());
+                    if (!f) return;
+                    if ((state.deliveredFiles[currentP.id] || []).includes(f.id)) { if (!already.includes(f.name)) already.push(f.name); return; }
+                    if (!state.pendingAttachments[currentP.id].includes(f.id)) state.pendingAttachments[currentP.id].push(f.id);
+                    if (!added.includes(f.name)) added.push(f.name);
+                });
+                if (added.length === 0) {
+                    state.messages.push({ sender: "Sistema", text: "📎 " + currentP.name + " pidió archivo(s) ya enviados anteriormente: " + already.join(", ") + ". No se re-adjuntan (ya están en su historial).", type: "system", timestamp: now(), cycle: state.cycle });
+                    finishSubmitResponse(response);
+                    return;
+                }
+                pendingResponseCache = response;
+                let txt = currentP.name + " solicitó: " + reqNames.join(", ") + ". Se adjuntará(n): " + added.join(", ") + ".";
+                if (already.length) txt += " Ya enviados antes (no se re-adjuntan): " + already.join(", ") + ".";
+                document.getElementById('attach-modal-text').textContent = txt;
+                document.getElementById('attach-modal').style.display = 'flex';
+                return;
+            }
+            finishSubmitResponse(response);
+        }
+
+        function saveAndContinuePending() {
+            closeModals();
+            const currentP = state.participants[state.currentParticipantIndex];
+            const names = (state.pendingAttachments[currentP.id] || []).map(fileName).filter(Boolean);
+            state.messages.push({ sender: "Sistema", text: "📎 " + currentP.name + " solicitó: " + names.join(", ") + ". El adjunto viajará en su próximo prompt.", type: "system", timestamp: now(), cycle: state.cycle });
+            const r = pendingResponseCache; pendingResponseCache = "";
+            finishSubmitResponse(r);
+        }
+
+        function regenerateWithAttachments() {
+            closeModals();
+            const currentP = state.participants[state.currentParticipantIndex];
+            const response = pendingResponseCache;
+            // PRESERVA la respuesta intermedia y su síntesis como evidencia dentro del turno
+            const summary = document.getElementById('summary-input').value.trim() || extractSummary(response);
+            state.messages.push({ sender: currentP.name, text: response, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle });
+            const snapshot = (state.pendingAttachments[currentP.id] || []).slice();
+            state.deliveredFiles[currentP.id] = unionArr(state.deliveredFiles[currentP.id], snapshot);
+            state.pendingAttachments[currentP.id] = [];
+            state.turnAttachments[currentP.id] = snapshot;
+            const names = snapshot.map(fileName).filter(Boolean);
+            state.messages.push({ sender: "Sistema", text: "📎 " + currentP.name + " solicitó: " + names.join(", ") + ". Prompt regenerado con el/los adjunto(s); síntesis intermedia preservada.", type: "system", timestamp: now(), cycle: state.cycle });
+            pendingResponseCache = "";
+            resetInputs();
+            saveState(); renderAll();
+            alert("Prompt regenerado con: " + names.join(", ") + ". Copialo y pegalo nuevamente al LLM; luego pegá acá su respuesta completa.");
+        }
+
+        function finishSubmitResponse(response) {
             const summary = document.getElementById('summary-input').value.trim() || extractSummary(response);
             const currentP = state.participants[state.currentParticipantIndex];
             state.messages.push({ sender: currentP.name, text: response, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle });
             if (!state.spokenThisCycle.includes(currentP.id)) state.spokenThisCycle.push(currentP.id);
             state.reinsertQueue = state.reinsertQueue.filter(id => id !== currentP.id);
-            currentP.reintegratedAtMsgIndex = null; // ya resincronizado: habló
+            currentP.reintegratedAtMsgIndex = null;
+            state.deliveredFiles[currentP.id] = unionArr(state.deliveredFiles[currentP.id], state.pendingAttachments[currentP.id]);
+            state.pendingAttachments[currentP.id] = [];
+            state.turnAttachments[currentP.id] = [];
 
-            if (isQwenTurn()) {
+            if (isSummarizerTurn()) {
                 const cum = document.getElementById('qwen-summary-input').value.trim() || extractCumulative(response);
                 if (cum) { state.cumulativeSummary = cum; cumulativeUpdatedCycle = state.cycle; }
                 document.getElementById('qwen-summary-input').value = "";
@@ -421,12 +662,11 @@
                 state.messages.push({ sender: "Sistema", text: "✅ " + p.name + " ha vuelto al consejo.", type: "system", timestamp: now(), cycle: state.cycle });
                 showReintegrationModal(p);
                 p.leftAtMsgIndex = null; p.leftAtTime = null;
-                p.reintegratedAtMsgIndex = state.messages.length; // snapshot: desde acá se sincroniza en vivo
+                p.reintegratedAtMsgIndex = state.messages.length;
                 if (!state.reinsertQueue.includes(p.id)) state.reinsertQueue.push(p.id);
-                // Si Qwen estaba por cerrar y NO hay respuesta en vuelo pegada, el reincorporado habla antes
                 const cur = state.participants[state.currentParticipantIndex];
                 const boxEmpty = document.getElementById('response-input').value.trim() === "";
-                if (cur && cur.id === 'qwen' && !state.spokenThisCycle.includes('qwen') && !state.spokenThisCycle.includes(p.id) && boxEmpty) {
+                if (cur && cur.id === state.summarizerId && !state.spokenThisCycle.includes(cur.id) && !state.spokenThisCycle.includes(p.id) && boxEmpty) {
                     state.currentParticipantIndex = idx;
                     state.reinsertQueue = state.reinsertQueue.filter(x => x !== p.id);
                     p.reintegratedAtMsgIndex = null;
@@ -482,6 +722,10 @@
             localStorage.removeItem('michelab_council_v4');
             state = defaultState();
             cumulativeUpdatedCycle = 0;
+            pendingResponseCache = "";
+            initParticipants = ["ChatGPT", "Meta", "Gemini", "Claude", "Qwen"];
+            initFiles = [];
+            renderInitParticipants(); renderInitFiles();
             resetInputs();
             document.getElementById('qwen-summary-input').value = "";
             document.getElementById('username-input').value = "Miche";
@@ -492,7 +736,11 @@
         }
 
         function exportDebate() {
-            let md = "# 🏛️ AI Council - Debate\n\n**Moderador:** " + state.userName + "\n**Tema:** " + state.topic + "\n**Contexto:** " + state.context + "\n**Ciclos:** " + state.cycle + "\n**Exportado:** " + new Date().toLocaleString() + "\n\n---\n\n## 📋 Resumen Acumulativo\n\n" + (state.cumulativeSummary || "(vacío)") + "\n\n---\n\n## 💬 Transcripción Completa\n\n";
+            let md = "# 🏛️ AI Council - Debate\n\n**Moderador:** " + state.userName + "\n**Tema:** " + state.topic + "\n**Contexto:** " + state.context + "\n**Ciclos:** " + state.cycle + "\n**Exportado:** " + new Date().toLocaleString() + "\n\n---\n\n";
+            if (state.contextFiles.length) {
+                md += "## 📎 Archivos de contexto\n\n" + state.contextFiles.map(f => "- " + f.name + " (leído como .txt)").join("\n") + "\n\n---\n\n";
+            }
+            md += "## 📋 Resumen Acumulativo\n\n" + (state.cumulativeSummary || "(vacío)") + "\n\n---\n\n## 💬 Transcripción Completa\n\n";
             state.messages.forEach(msg => {
                 md += "### " + msg.sender + " (" + msg.timestamp + ")\n" + msg.text + "\n";
                 if (msg.summary && msg.type !== 'system') md += "\n> ✂️ Síntesis: " + msg.summary + "\n";
@@ -505,6 +753,14 @@
             URL.revokeObjectURL(url);
         }
 
+        function viewFile(id) {
+            const f = state.contextFiles.find(x => x.id === id);
+            if (!f) return;
+            document.getElementById('file-view-name').textContent = f.name;
+            document.getElementById('file-view-content').value = f.content;
+            document.getElementById('file-view-modal').style.display = 'flex';
+        }
+
         // ---------- RENDER ----------
         function cycleSynthesis() {
             return state.messages.filter(m => m.cycle === state.cycle && m.type !== 'system')
@@ -513,7 +769,7 @@
 
         function renderAll() {
             document.querySelectorAll('.uname').forEach(el => { el.textContent = state.userName; });
-            renderParticipants(); renderChat(); renderControls(); renderCumulativeSummary();
+            renderParticipants(); renderFiles(); renderChat(); renderControls(); renderCumulativeSummary();
         }
 
         function renderParticipants() {
@@ -525,15 +781,30 @@
                 list.appendChild(div);
             });
             document.getElementById('cycle-indicator').textContent = "Ciclo " + state.cycle;
-            const hasQwen = state.participants.some(p => p.id === 'qwen');
-            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => p.name).join(" → ") + (hasQwen ? ' <span style="color:var(--qwen)">(Qwen cierra)</span>' : ' <span style="color:var(--warning)">(sin Qwen: síntesis automática)</span>');
+            const sumName = summarizerName();
+            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => p.name).join(" → ") + (sumName ? ' <span style="color:var(--qwen)">(cierra: ' + sumName + ')</span>' : ' <span style="color:var(--warning)">(sin resumidor: síntesis automática)</span>');
+        }
+
+        function renderFiles() {
+            const sec = document.getElementById('files-section');
+            const list = document.getElementById('files-list');
+            if (!state.contextFiles.length) { sec.classList.add('hidden'); return; }
+            sec.classList.remove('hidden');
+            list.innerHTML = "";
+            state.contextFiles.forEach(f => {
+                const row = document.createElement('div');
+                row.className = 'init-row';
+                row.innerHTML = "<span>📄 " + f.name + (f.isDebateExport ? " 🔄" : "") + "</span><button class='secondary tiny' onclick=\"viewFile('" + f.id + "')\">ver</button>";
+                list.appendChild(row);
+            });
         }
 
         function renderChat() {
             const c = document.getElementById('chat-container'); c.innerHTML = "";
+            const sumName = summarizerName();
             state.messages.forEach(msg => {
                 const div = document.createElement('div');
-                div.className = "message " + msg.type + (msg.sender === 'Qwen' ? ' qwen' : '');
+                div.className = "message " + msg.type + (msg.sender === sumName ? ' qwen' : '');
                 const synth = (msg.summary && msg.type === 'llm') ? '<div class="synth">✂️ ' + msg.summary + '</div>' : '';
                 div.innerHTML = '<span class="sender">' + msg.sender + ' <small style="font-weight:normal; color:var(--text-muted)">(' + msg.timestamp + ')</small></span><div class="content">' + msg.text + '</div>' + synth;
                 c.appendChild(div);
@@ -550,15 +821,20 @@
             const p = state.participants[state.currentParticipantIndex];
             const preview = rotationPreview();
             ti.textContent = "🎤 Turno actual: " + p.name + (preview.length ? " · A continuación: " + preview.join(" → ") : " · cierra el ciclo");
-            document.getElementById('qwen-summary-section').classList.toggle('hidden', !isQwenTurn());
+            document.getElementById('qwen-summary-section').classList.toggle('hidden', !isSummarizerTurn());
+            document.getElementById('summarizer-label').textContent = "📋 RESUMEN_ACUMULATIVO (auto-extraído de la respuesta de " + (summarizerName() || "el resumidor") + ", editable):";
 
             let prompt = "Contexto del proyecto: " + state.context + "\nTema del debate: " + state.topic + "\n\n";
+
+            if (state.contextFiles.length) {
+                prompt += "## ARCHIVOS DE CONTEXTO DISPONIBLES (contenido como .txt):\n" + state.contextFiles.map(f => "- " + f.name).join("\n") + "\nSi necesitás leer uno, terminá tu respuesta con una línea \"ADJUNTAR: <nombre exacto>\". Su contenido se te adjuntará una sola vez (en el prompt regenerado ahora o en tu próximo turno).\n\n";
+            }
+
             if (state.cumulativeSummary) prompt += "## RESUMEN ACUMULATIVO (ciclos anteriores y ausencias):\n" + state.cumulativeSummary + "\n\n";
             prompt += "## SÍNTESIS DEL CICLO ACTUAL (Ciclo " + state.cycle + "):\n" + (cycleSynthesis() || "(aún nadie habló)") + "\n";
 
-            // Resincronización en vivo para reincorporados
             if (p.reintegratedAtMsgIndex != null) {
-                const news = state.messages.slice(p.reintegratedAtMsgIndex).filter(m => m.type !== 'system');
+                const news = state.messages.slice(p.reintegratedAtMsgIndex).filter(m => m.type !== 'system' && m.sender !== p.name);
                 if (news.length) {
                     prompt += "\n## NOVEDADES DESDE TU REINCORPORACIÓN:\n" + news.map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n") + "\n";
                 }
@@ -569,8 +845,15 @@
                 prompt += "\n⚠️ AUSENTES por límite de tokens: " + absentees.map(a => a.name + " (desde " + a.leftAtTime + ")").join(', ') + ".\nSi mencionás algo crítico para alguno, agregá una línea \"PARA [Nombre]: ...\" (máx 1 línea c/u).\n";
             }
 
-            if (isQwenTurn()) {
-                prompt += "\n## TU ROL ESPECIAL (Qwen, cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que incluya: ciclos anteriores + este ciclo (todas las opiniones, incluida la de reincorporados) + decisiones tomadas + pendientes + TAGs de ausencia. La interfaz la capturará automáticamente.\n";
+            const attIds = (state.turnAttachments[p.id] && state.turnAttachments[p.id].length) ? state.turnAttachments[p.id] : (state.pendingAttachments[p.id] || []);
+            const atts = attIds.map(fid => state.contextFiles.find(f => f.id === fid)).filter(Boolean);
+            if (atts.length) {
+                prompt += "\n## ARCHIVOS ADJUNTOS SOLICITADOS POR VOS:\n";
+                atts.forEach(f => { prompt += "\n### " + f.name + " (contenido como .txt)\n" + f.content + "\n"; });
+            }
+
+            if (isSummarizerTurn()) {
+                prompt += "\n## TU ROL ESPECIAL (" + p.name + ", cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que sea exhaustiva y permita RETOMAR el debate en el futuro sin perder nada. Debe incluir:\n   - Ciclos anteriores y actual, con la posición de cada participante (incluidos reincorporados y respuestas intermedias).\n   - Decisiones tomadas.\n   - Pendientes.\n   - Ideas DESCARTADAS o rechazadas (con el motivo).\n   - Contradicciones abiertas o cambios de postura.\n   - TAGs de ausencia.\nLa interfaz la capturará automáticamente.\n";
             } else {
                 prompt += "\nTu turno, " + p.name + ". Respondé al último punto con tu opinión técnica.\n";
             }
@@ -587,7 +870,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.6 cargado correctamente.");
+        console.log("✅ AI Council v0.8 cargado correctamente.");
     </script>
 </body>
 </html>
