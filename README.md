@@ -41,6 +41,10 @@ colectivo del proceso.
    - Revisá/editá la **síntesis auto-extraída** (lo único que verá el siguiente).
    - `Guardar Respuesta y Continuar ➡️`.
 
+**Atajos:** <kbd>Alt</kbd>+<kbd>C</kbd> copia el prompt (y deja el cursor en el recuadro de
+respuesta) · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> guarda la respuesta · <kbd>Esc</kbd> cierra ventanas.
+Las confirmaciones de copiado son avisos que no bloquean (sin `alert`).
+
 ---
 
 ## Mecánica del consejo
@@ -131,8 +135,11 @@ vuelta; su respuesta original queda en la transcripción), **editar vos**, o **g
 
 - Subida en el setup; cualquier extensión (`.js`, `.mjs`, `.ps1`, `.txt`, …) se guarda y
   visualiza como **texto plano (.txt)**.
-- Cada prompt lista `## ARCHIVOS DE CONTEXTO DISPONIBLES` con la instrucción de pedirlos
-  con una línea `ADJUNTAR: <nombre exacto>`.
+- Cada prompt lista `## ARCHIVOS DE CONTEXTO DISPONIBLES` y pide solicitar **todos los
+  necesarios en una sola línea**: `ADJUNTAR: a.js, b.mjs` o `ADJUNTAR: *` para todos
+  (cada pedido extra es una regeneración más para el moderador).
+- La detección tolera markdown (`**ADJUNTAR:**`), nombres sin extensión y separadores `,` o `;`.
+  Si piden un archivo que no está cargado, queda un aviso con la lista de disponibles.
 - Al detectar el pedido, la interfaz ofrece dos caminos:
   1. **Regenerar el prompt ahora con el adjunto** (misma vuelta; el LLM recibe
      prompt inicial + listado + síntesis anteriores + el archivo pedido).
@@ -224,6 +231,7 @@ Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve p
 | v0.9 | Primera vuelta a ciegas (opcional, activada por defecto): Ciclo 1 sin ver al resto, Ciclo 2 con las posturas ciegas tal cual y pedido explícito de desacuerdos. |
 | v0.10 | Registro de decisiones: `PROPONGO` / `APOYO` / `OBJETO` con motivo; estados PROPUESTA, DISPUTADA, ACORDADA, RECHAZADA y REEMPLAZADA; solo el moderador resuelve, con constancia de objeciones y silencios; restauración exacta al retomar. |
 | v0.11 | Chequeo determinista del acumulativo: atribuciones imposibles o sin respaldo, ciclos inexistentes, omisiones, "Decisiones tomadas" y `D#` inexistentes; TAGs perdidos re-agregados; prompt de corrección para el resumidor. |
+| v0.12 | Menos fricción: todos los adjuntos en una línea (`ADJUNTAR: *`), detección tolerante y aviso de archivos inexistentes, atajos Alt+C / Ctrl+Enter / Esc, avisos no bloqueantes, `**RESUMEN:**` en negrita reconocido. |
 
 ---
 

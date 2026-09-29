@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.11</title>
+    <title>AI Council v0.12</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -40,6 +40,9 @@
         .status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 99px; }
         .status-absent { background: var(--danger); color: white; }
         .hidden { display: none !important; }
+        #toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--success); color: white; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; font-weight: bold; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 200; }
+        #toast.show { opacity: 1; }
+        kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 0.75rem; }
         .ledger-section { background: #1f1a0e; border: 1px solid var(--warning); border-radius: 4px; padding: 0.5rem; }
         .ledger-item { background: var(--bg); border-radius: 4px; padding: 0.4rem 0.5rem; margin-bottom: 0.4rem; font-size: 0.78rem; }
         .ledger-item .lid { font-weight: bold; }
@@ -59,7 +62,7 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.11</span></h1>
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.12</span></h1>
         <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
@@ -133,7 +136,7 @@
                 <div class="controls">
                     <div id="turn-info" style="margin-bottom: 0.5rem; font-weight: bold; color: var(--warning);">Esperando inicio...</div>
                     <div class="prompt-box" id="prompt-display"></div>
-                    <div class="btn-group"><button class="secondary" onclick="copyPrompt()">📋 Copiar Prompt</button></div>
+                    <div class="btn-group" style="align-items: center;"><button class="secondary" onclick="copyPrompt()">📋 Copiar Prompt</button><small style="color: var(--text-muted);"><kbd>Alt</kbd>+<kbd>C</kbd></small></div>
                     <hr style="border-color: var(--border); margin: 1rem 0;">
                     <textarea id="response-input" rows="4" placeholder="Pega aquí la respuesta COMPLETA del LLM..."></textarea>
                     <label class="mini">✂️ Resumen sintético (auto-extraído, editable). Es lo único que verá el próximo LLM:</label>
@@ -142,7 +145,7 @@
                         <label class="mini" id="summarizer-label">📋 RESUMEN_ACUMULATIVO (auto-extraído, editable):</label>
                         <textarea id="cumulative-input" rows="6"></textarea>
                     </div>
-                    <div class="btn-group"><button onclick="submitResponse()">Guardar Respuesta y Continuar ➡️</button></div>
+                    <div class="btn-group" style="align-items: center;"><button onclick="submitResponse()">Guardar Respuesta y Continuar ➡️</button><small style="color: var(--text-muted);"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> · <kbd>Esc</kbd> cierra ventanas</small></div>
                 </div>
             </main>
         </div>
@@ -224,6 +227,8 @@
             <button class="secondary" onclick="closeModals()">Cerrar</button>
         </div>
     </div>
+
+    <div id="toast"></div>
 
     <script>
         // ---------- ESTADO ----------
@@ -710,11 +715,11 @@
         }
 
         // ---------- EXTRACCIÓN ----------
-        function isRequestLine(l) { return /^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:/i.test(l) || isLedgerLine(l); }
+        function isRequestLine(l) { return /^(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:/i.test(cleanMarkerLine(l)) || isLedgerLine(l); }
 
         function extractSummary(text) {
             if (!text || !text.trim()) return "";
-            const lines = text.split("\n").map(l => l.trim());
+            const lines = text.split("\n").map(l => l.trim().replace(/\*\*/g, "").replace(/^#+\s*/, ""));
             let idx = -1;
             for (let i = lines.length - 1; i >= 0; i--) {
                 if (/^(resumen|síntesis|sintesis|tl;dr|en resumen)\s*:/i.test(lines[i])) { idx = i; break; }
@@ -738,13 +743,25 @@
             return lines.slice(start, end).join("\n").trim();
         }
 
+        let lastUnmatchedRequests = [];
+        function matchContextFile(n) {
+            const q = n.replace(/^[`"'<]+|[`"'>.]+$/g, "").trim().toLowerCase();
+            const noExt = x => x.replace(/\.[^.]+$/, "");
+            return state.contextFiles.find(f => f.name.toLowerCase() === q) || state.contextFiles.find(f => noExt(f.name.toLowerCase()) === noExt(q));
+        }
         function detectFileRequests(text) {
-            const names = [];
+            const names = []; lastUnmatchedRequests = [];
             text.split("\n").forEach(l => {
-                const m = l.match(/^\s*(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:\s*(.+)$/i);
-                if (m) m[2].split(",").forEach(part => { const n = part.trim(); if (n) names.push(n); });
+                const m = cleanMarkerLine(l).match(/^(adjuntar|solicito|solicito_archivo|pedido_archivo)\s*:\s*(.+)$/i);
+                if (!m) return;
+                m[2].split(/[,;]/).forEach(part => {
+                    const n = part.trim(); if (!n) return;
+                    if (/^(\*|todos|todo|all)$/i.test(n)) { state.contextFiles.forEach(f => names.push(f.name)); return; }
+                    const f = matchContextFile(n);
+                    if (f) names.push(f.name); else lastUnmatchedRequests.push(n);
+                });
             });
-            return names.filter(n => state.contextFiles.some(f => f.name.toLowerCase() === n.toLowerCase()));
+            return [...new Set(names)];
         }
 
         let summaryManuallyEdited = false;
@@ -916,6 +933,7 @@
             if (!response) return alert("Pega la respuesta del LLM primero.");
             const currentP = state.participants[state.currentParticipantIndex];
             const reqNames = detectFileRequests(response);
+            if (lastUnmatchedRequests.length) sysMsg("⚠️ " + currentP.name + " pidió archivo(s) que no están cargados: " + lastUnmatchedRequests.join(", ") + ". Disponibles: " + (state.contextFiles.map(f => f.name).join(", ") || "(ninguno)") + ".");
             if (reqNames.length) {
                 if (!Array.isArray(state.pendingAttachments[currentP.id])) state.pendingAttachments[currentP.id] = [];
                 const added = [], already = [];
@@ -967,7 +985,7 @@
             pendingResponseCache = "";
             resetInputs();
             saveState(); renderAll();
-            alert("Prompt regenerado con: " + names.join(", ") + ". Copialo y pegalo nuevamente al LLM; luego pegá acá su respuesta completa.");
+            toast("📎 Prompt regenerado con: " + names.join(", ") + " — copialo de nuevo (Alt+C)");
         }
 
         function finishSubmitResponse(response, opts) {
@@ -1239,7 +1257,7 @@
             let prompt = "Contexto del proyecto: " + state.context + "\nTema del debate: " + state.topic + "\n\n";
 
             if (state.contextFiles.length) {
-                prompt += "## ARCHIVOS DE CONTEXTO DISPONIBLES (contenido como .txt):\n" + state.contextFiles.map(f => "- " + f.name).join("\n") + "\nSi necesitás leer uno, terminá tu respuesta con una línea \"ADJUNTAR: <nombre exacto>\". Su contenido se te adjuntará una sola vez (en el prompt regenerado ahora o en tu próximo turno).\n\n";
+                prompt += "## ARCHIVOS DE CONTEXTO DISPONIBLES (contenido como .txt):\n" + state.contextFiles.map(f => "- " + f.name).join("\n") + "\nSi necesitás leer archivos, pedí TODOS los que vayas a necesitar en UNA sola línea al final de tu respuesta: \"ADJUNTAR: nombre1, nombre2\" (o \"ADJUNTAR: *\" para todos). Cada pedido adicional obliga al moderador a regenerar el prompt, así que no los pidas de a uno. Cada archivo se te adjunta una sola vez.\n\n";
             }
 
             if (state.cumulativeSummary) prompt += "## RESUMEN ACUMULATIVO (ciclos anteriores y ausencias):\n" + state.cumulativeSummary + "\n\n";
@@ -1304,11 +1322,34 @@
             el.textContent = state.cumulativeSummary ? state.cumulativeSummary : "Aún no se generó resumen.";
         }
 
-        function copyPrompt() { navigator.clipboard.writeText(document.getElementById('prompt-display').textContent); alert("Prompt copiado."); }
-        function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
+        let toastTimer = null;
+        function toast(msg) {
+            const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+            clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+        }
+        function copyPrompt() {
+            const txt = document.getElementById('prompt-display').textContent;
+            if (!txt.trim()) return toast("No hay prompt para copiar.");
+            navigator.clipboard.writeText(txt).then(() => toast("📋 Prompt copiado")).catch(() => toast("No se pudo copiar: seleccionalo a mano."));
+            document.getElementById('response-input').focus();
+        }
+
+        // Atajos: Alt+C copia el prompt · Ctrl/Cmd+Enter guarda la respuesta · Esc cierra ventanas
+        document.addEventListener('keydown', (e) => {
+            const appVisible = !document.getElementById('main-app').classList.contains('hidden');
+            if (e.key === 'Escape') { closeModals(); return; }
+            if (!appVisible) return;
+            const modalOpen = [...document.querySelectorAll('.modal-overlay')].some(m => m.style.display === 'flex');
+            if (e.altKey && !e.ctrlKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); if (!modalOpen) copyPrompt(); return; }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                const id = document.activeElement && document.activeElement.id;
+                if (!modalOpen && ['response-input', 'summary-input', 'cumulative-input'].includes(id)) { e.preventDefault(); submitResponse(); }
+            }
+        });
+        function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value).then(() => toast("📋 Resumen copiado")).catch(() => toast("No se pudo copiar: seleccionalo a mano.")); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.11 cargado correctamente.");
+        console.log("✅ AI Council v0.12 cargado correctamente.");
     </script>
 </body>
 </html>
