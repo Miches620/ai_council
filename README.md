@@ -32,6 +32,7 @@ colectivo del proceso.
    - **Tu nombre** como moderador (se recuerda entre sesiones), **Tema del debate**, **Contexto / Links**.
    - **Archivos de contexto** (opcionales): cualquier extensión se lee como `.txt` (tope 300 KB por archivo).
    - **Integrantes del consejo**: lista editable con defaults (ChatGPT, Meta, Gemini, Claude, Qwen); quitá, agregá LLMs o humanos.
+   - **Primera vuelta a ciegas** (activada por defecto): en el Ciclo 1 nadie ve las respuestas de los demás.
    - **Resumidor**: quién cierra los ciclos y genera el `RESUMEN_ACUMULATIVO` (default: el último de la lista).
 3. `Iniciar Debate` → el consejo queda armado y el primer turno genera su prompt.
 4. Flujo por turno:
@@ -49,6 +50,17 @@ colectivo del proceso.
 - El ciclo **cierra recién cuando todos los participantes activos opinaron** y el resumidor produjo el acumulativo.
 - Al cierre: modal para **intervenir como moderador** o **continuar al ciclo siguiente**.
 - El indicador de turno muestra la rotación real simulada: `A continuación: X → Y → Z`.
+
+### Primera vuelta a ciegas
+- En el **Ciclo 1**, cada participante responde **sin ver** las respuestas de los demás LLMs
+  (sí ve las intervenciones del moderador). Evita que el primero en hablar marque el rumbo
+  y que el debate se llene de "coincido".
+- El **resumidor** sí ve todo, porque necesita cerrar el ciclo (su opinión, por lo tanto, no es ciega).
+- En el **Ciclo 2**, el prompt incluye las **posturas del Ciclo 1 tal cual** (armadas por la
+  interfaz, sin depender del resumidor) y pide señalar coincidencias y **desacuerdos concretos**,
+  cambiando de postura solo por un argumento, no por mayoría.
+- Las reincorporaciones durante el Ciclo 1 respetan la ceguera (snapshot y novedades).
+- Se desactiva con el checkbox del setup; el export `.md` indica si estuvo activa.
 
 ### Cadena de síntesis (control de crecimiento del prompt)
 - Todo LLM debe cerrar su respuesta con `RESUMEN:` (máx 2 líneas).
@@ -166,6 +178,7 @@ Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve p
 | v0.8 | Solicitudes con nombres de archivo, adjuntos entregados una sola vez, síntesis intermedias preservadas en turnos multi-prompt, retomado de debates desde `.md` exportado, resumidor configurable (default Qwen). |
 | v0.8.1 | Seguridad y conservación: el contenido de los LLMs se muestra como texto (sin interpretar HTML), el acumulativo ya no se trunca en silencio (aviso a partir de 8000 caracteres), finalizar siempre exporta antes de borrar y "Cancelar" mantiene el debate. |
 | v0.8.2 | Neutral para uso público: sin referencias a MicheLab en la interfaz, nombre del moderador recordado, resumidor por defecto = último de la lista, textos de ausencia neutrales, clave de almacenamiento `ai_council_state` con migración automática. |
+| v0.9 | Primera vuelta a ciegas (opcional, activada por defecto): Ciclo 1 sin ver al resto, Ciclo 2 con las posturas ciegas tal cual y pedido explícito de desacuerdos. |
 
 ---
 

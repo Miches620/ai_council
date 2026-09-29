@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.8.2</title>
+    <title>AI Council v0.9</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -51,7 +51,7 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.8.2</span></h1>
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.9</span></h1>
         <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
@@ -71,6 +71,10 @@
             </div>
             <label class="mini" style="margin-top: 0.5rem;">🧠 Quién cierra los ciclos y genera el RESUMEN_ACUMULATIVO:</label>
             <select id="init-summarizer"></select>
+            <label style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; margin-top: 0.5rem;">
+                <input type="checkbox" id="init-blind" checked style="width: auto;">
+                🙈 Primera vuelta a ciegas (en el Ciclo 1 nadie ve las respuestas de los demás; evita que el primero en hablar marque el rumbo)
+            </label>
         </div>
 
         <button onclick="startDebate()">Iniciar Debate</button>
@@ -209,6 +213,7 @@
                 deliveredFiles: {},
                 turnAttachments: {},
                 summarizerId: null,
+                blindFirstCycle: false,
                 participants: [
                     { id: "chatgpt", name: "ChatGPT", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
                     { id: "meta", name: "Meta", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
@@ -252,6 +257,7 @@
             if (!state.deliveredFiles || typeof state.deliveredFiles !== 'object') state.deliveredFiles = {};
             if (!state.turnAttachments || typeof state.turnAttachments !== 'object') state.turnAttachments = {};
             if (!state.userName) state.userName = "Moderador";
+            if (typeof state.blindFirstCycle !== 'boolean') state.blindFirstCycle = false;
             if (!state.summarizerId) {
                 const last = state.participants[state.participants.length - 1];
                 state.summarizerId = last ? last.id : null;
@@ -484,6 +490,7 @@
             const sp = built.find(p => p.name === selName);
             state.summarizerId = sp ? sp.id : (built[0] ? built[0].id : null);
             state.contextFiles = initFiles.slice();
+            state.blindFirstCycle = document.getElementById('init-blind').checked;
             state.pendingAttachments = {}; state.deliveredFiles = {}; state.turnAttachments = {};
             state.messages.push({ sender: userName, text: "Inicia el debate sobre: " + topic, summary: "Inicia el debate sobre: " + topic, type: "moderator", timestamp: now(), cycle: state.cycle });
             // Retoma de debate desde export .md
@@ -708,7 +715,8 @@
             summary += "Te ausentaste a las " + participant.leftAtTime + " (Ciclo " + state.cycle + ").\n\n";
             summary += "## RESUMEN_ACUMULATIVO:\n" + (state.cumulativeSummary || "(vacío)") + "\n\n";
             summary += "## LO QUE TE PERDISTE:\n";
-            missed.forEach(msg => { if (msg.type !== 'system') summary += "**" + msg.sender + "**: " + (msg.summary || msg.text) + "\n\n"; });
+            if (isBlindFor(participant)) summary += "(🙈 Ciclo 1 a ciegas: las respuestas de los demás LLMs de este ciclo se te muestran recién en el Ciclo 2.)\n\n";
+            missed.forEach(msg => { if (msg.type !== 'system' && !hiddenByBlind(msg, participant)) summary += "**" + msg.sender + "**: " + (msg.summary || msg.text) + "\n\n"; });
             const paraLines = [];
             missed.forEach(msg => {
                 msg.text.split("\n").forEach(l => { if (l.includes("PARA " + participant.name + ":")) paraLines.push(l.trim()); });
@@ -763,7 +771,7 @@
         }
 
         function exportDebate() {
-            let md = "# 🏛️ AI Council - Debate\n\n**Moderador:** " + state.userName + "\n**Tema:** " + state.topic + "\n**Contexto:** " + state.context + "\n**Ciclos:** " + state.cycle + "\n**Exportado:** " + new Date().toLocaleString() + "\n\n---\n\n";
+            let md = "# 🏛️ AI Council - Debate\n\n**Moderador:** " + state.userName + "\n**Tema:** " + state.topic + "\n**Contexto:** " + state.context + "\n**Ciclos:** " + state.cycle + "\n**Primera vuelta a ciegas:** " + (state.blindFirstCycle ? "sí" : "no") + "\n**Exportado:** " + new Date().toLocaleString() + "\n\n---\n\n";
             if (state.contextFiles.length) {
                 md += "## 📎 Archivos de contexto\n\n" + state.contextFiles.map(f => "- " + f.name + " (leído como .txt)").join("\n") + "\n\n---\n\n";
             }
@@ -789,8 +797,13 @@
         }
 
         // ---------- RENDER ----------
-        function cycleSynthesis() {
-            return state.messages.filter(m => m.cycle === state.cycle && m.type !== 'system')
+        // Vuelta a ciegas: en el Ciclo 1, cada participante (salvo el resumidor, que necesita ver todo para cerrar)
+        // no recibe las respuestas de los demás LLMs. Las intervenciones del moderador sí se ven.
+        function isBlindFor(p) { return !!(state.blindFirstCycle && state.cycle === 1 && p && p.id !== state.summarizerId); }
+        function hiddenByBlind(m, p) { return isBlindFor(p) && m.cycle === 1 && m.type === 'llm' && m.sender !== p.name; }
+
+        function cycleSynthesis(forP) {
+            return state.messages.filter(m => m.cycle === state.cycle && m.type !== 'system' && !(forP && hiddenByBlind(m, forP)))
                 .map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n");
         }
 
@@ -858,10 +871,21 @@
             }
 
             if (state.cumulativeSummary) prompt += "## RESUMEN ACUMULATIVO (ciclos anteriores y ausencias):\n" + state.cumulativeSummary + "\n\n";
-            prompt += "## SÍNTESIS DEL CICLO ACTUAL (Ciclo " + state.cycle + "):\n" + (cycleSynthesis() || "(aún nadie habló)") + "\n";
+            if (isBlindFor(p)) {
+                prompt += "## 🙈 CICLO 1 A CIEGAS:\nEn esta primera vuelta cada participante responde sin ver a los demás. Da tu postura propia e independiente; en el próximo ciclo vas a ver las del resto.\n";
+                const own = cycleSynthesis(p);
+                if (own) prompt += "\n## LO DICHO HASTA AHORA (solo moderador y tus respuestas previas):\n" + own + "\n";
+            } else {
+                prompt += "## SÍNTESIS DEL CICLO ACTUAL (Ciclo " + state.cycle + "):\n" + (cycleSynthesis() || "(aún nadie habló)") + "\n";
+            }
+            if (state.blindFirstCycle && state.cycle === 2) {
+                const c1 = state.messages.filter(m => m.cycle === 1 && m.type === 'llm').map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n");
+                if (c1) prompt += "\n## POSTURAS DEL CICLO 1 (dadas a ciegas, tal cual):\n" + c1 + "\n";
+                prompt += "\n⚠️ En el Ciclo 1 todos respondieron SIN verse entre sí. Ahora que ves las posturas del resto, señalá explícitamente las coincidencias y, sobre todo, los DESACUERDOS concretos. No cambies de postura solo porque la mayoría piensa distinto: hacelo únicamente si un argumento te convence, y decí cuál.\n";
+            }
 
             if (p.reintegratedAtMsgIndex != null) {
-                const news = state.messages.slice(p.reintegratedAtMsgIndex).filter(m => m.type !== 'system' && m.sender !== p.name);
+                const news = state.messages.slice(p.reintegratedAtMsgIndex).filter(m => m.type !== 'system' && m.sender !== p.name && !hiddenByBlind(m, p));
                 if (news.length) {
                     prompt += "\n## NOVEDADES DESDE TU REINCORPORACIÓN:\n" + news.map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n") + "\n";
                 }
@@ -897,7 +921,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.8.2 cargado correctamente.");
+        console.log("✅ AI Council v0.9 cargado correctamente.");
     </script>
 </body>
 </html>
