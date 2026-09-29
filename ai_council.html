@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.8</title>
+    <title>AI Council v0.8.1</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -51,7 +51,7 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.8</span></h1>
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.8.1</span></h1>
         <input type="text" id="username-input" value="Miche" placeholder="Nombre de Usuario" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
@@ -251,6 +251,7 @@
         }
         function now() { return new Date().toLocaleTimeString(); }
         function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "p"; }
+        function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
         function unionArr(a, b) { const s = (a || []).slice(); (b || []).forEach(x => { if (!s.includes(x)) s.push(x); }); return s; }
         function summarizerName() { const p = state.participants.find(x => x.id === state.summarizerId); return p ? p.name : null; }
         function fileName(id) { const f = state.contextFiles.find(x => x.id === id); return f ? f.name : null; }
@@ -265,7 +266,7 @@
             initParticipants.forEach((n, i) => {
                 const row = document.createElement('div');
                 row.className = 'init-row';
-                row.innerHTML = "<span>" + n + "</span><button class='danger tiny' onclick='initRemoveParticipant(" + i + ")'>×</button>";
+                row.innerHTML = "<span>" + esc(n) + "</span><button class='danger tiny' onclick='initRemoveParticipant(" + i + ")'>×</button>";
                 el.appendChild(row);
             });
             renderInitSummarizer();
@@ -331,7 +332,7 @@
             initFiles.forEach((f, i) => {
                 const row = document.createElement('div');
                 row.className = 'init-row';
-                row.innerHTML = "<span>📄 " + f.name + " <small>(como .txt)</small>" + (f.isDebateExport ? " <small style='color:var(--qwen);'>🔄 debate retomable</small>" : "") + "</span><button class='danger tiny' onclick='initRemoveFile(" + i + ")'>×</button>";
+                row.innerHTML = "<span>📄 " + esc(f.name) + " <small>(como .txt)</small>" + (f.isDebateExport ? " <small style='color:var(--qwen);'>🔄 debate retomable</small>" : "") + "</span><button class='danger tiny' onclick='initRemoveFile(" + i + ")'>×</button>";
                 el.appendChild(row);
             });
         }
@@ -364,7 +365,8 @@
                 if (start !== -1 && i > start && /^resumen\s*:/i.test(lines[i].trim())) { end = i; break; }
             }
             if (start === -1) return "";
-            return lines.slice(start, end).join("\n").trim().slice(0, 4000);
+            // Sin truncado silencioso: el acumulativo completo se conserva (ver aviso en submitResponse)
+            return lines.slice(start, end).join("\n").trim();
         }
 
         function detectFileRequests(text) {
@@ -606,7 +608,10 @@
 
             if (isSummarizerTurn()) {
                 const cum = document.getElementById('qwen-summary-input').value.trim() || extractCumulative(response);
-                if (cum) { state.cumulativeSummary = cum; cumulativeUpdatedCycle = state.cycle; }
+                if (cum) {
+                    state.cumulativeSummary = cum; cumulativeUpdatedCycle = state.cycle;
+                    if (cum.length > 8000) state.messages.push({ sender: "Sistema", text: "⚠️ El RESUMEN_ACUMULATIVO ya tiene " + cum.length + " caracteres. No se recortó nada, pero los prompts están creciendo: considerá pedirle al resumidor que lo condense.", type: "system", timestamp: now(), cycle: state.cycle });
+                }
                 document.getElementById('qwen-summary-input').value = "";
                 qwenManuallyEdited = false;
             }
@@ -708,13 +713,14 @@
             closeModals();
             const prompt = "Eres " + participant.name + ". El debate sobre \"" + state.topic + "\" ha finalizado.\nRedacta un Markdown con: 1) Conclusiones, 2) Acuerdos/desacuerdos, 3) Próximos pasos para " + state.userName + ".\n\nRESUMEN_ACUMULATIVO:\n" + state.cumulativeSummary + "\n\nSÍNTESIS FINAL DEL CICLO " + state.cycle + ":\n" + cycleSynthesis();
             navigator.clipboard.writeText(prompt).catch(err => console.warn("No se pudo copiar:", err));
-            const exportFirst = confirm(
-                "📋 Prompt de finalización para " + participant.name + " copiado al portapapeles.\n\n" +
-                "¿Querés exportar la transcripción del debate a .md antes de volver al inicio?\n\n" +
-                "[Aceptar] = Exportar y volver al inicio\n[Cancelar] = Volver al inicio sin exportar"
+            // Conservar primero: el export es obligatorio antes de borrar el estado local
+            exportDebate();
+            const goHome = confirm(
+                "📋 Prompt de finalización para " + participant.name + " copiado al portapapeles.\n" +
+                "📄 Transcripción exportada a .md (revisá tus descargas).\n\n" +
+                "[Aceptar] = Volver al inicio (se borra el estado local)\n[Cancelar] = Seguir en este debate"
             );
-            if (exportFirst) exportDebate();
-            resetToInit();
+            if (goHome) resetToInit();
         }
 
         function resetToInit() {
@@ -776,13 +782,13 @@
             const list = document.getElementById('participants-list'); list.innerHTML = "";
             state.participants.forEach(p => {
                 const div = document.createElement('div'); div.className = 'participant-item';
-                div.innerHTML = "<span>" + p.name + (!p.active ? ' <span class="status-badge status-absent">Ausente</span>' : '') + "</span>" +
+                div.innerHTML = "<span>" + esc(p.name) + (!p.active ? ' <span class="status-badge status-absent">Ausente</span>' : '') + "</span>" +
                     "<button class=\"" + (p.active ? 'danger' : 'success') + " tiny\" onclick=\"toggleParticipant('" + p.id + "')\">" + (p.active ? 'Deshabilitar' : 'Reintegrar') + "</button>";
                 list.appendChild(div);
             });
             document.getElementById('cycle-indicator').textContent = "Ciclo " + state.cycle;
             const sumName = summarizerName();
-            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => p.name).join(" → ") + (sumName ? ' <span style="color:var(--qwen)">(cierra: ' + sumName + ')</span>' : ' <span style="color:var(--warning)">(sin resumidor: síntesis automática)</span>');
+            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => esc(p.name)).join(" → ") + (sumName ? ' <span style="color:var(--qwen)">(cierra: ' + esc(sumName) + ')</span>' : ' <span style="color:var(--warning)">(sin resumidor: síntesis automática)</span>');
         }
 
         function renderFiles() {
@@ -794,7 +800,7 @@
             state.contextFiles.forEach(f => {
                 const row = document.createElement('div');
                 row.className = 'init-row';
-                row.innerHTML = "<span>📄 " + f.name + (f.isDebateExport ? " 🔄" : "") + "</span><button class='secondary tiny' onclick=\"viewFile('" + f.id + "')\">ver</button>";
+                row.innerHTML = "<span>📄 " + esc(f.name) + (f.isDebateExport ? " 🔄" : "") + "</span><button class='secondary tiny' onclick=\"viewFile('" + f.id + "')\">ver</button>";
                 list.appendChild(row);
             });
         }
@@ -805,8 +811,8 @@
             state.messages.forEach(msg => {
                 const div = document.createElement('div');
                 div.className = "message " + msg.type + (msg.sender === sumName ? ' qwen' : '');
-                const synth = (msg.summary && msg.type === 'llm') ? '<div class="synth">✂️ ' + msg.summary + '</div>' : '';
-                div.innerHTML = '<span class="sender">' + msg.sender + ' <small style="font-weight:normal; color:var(--text-muted)">(' + msg.timestamp + ')</small></span><div class="content">' + msg.text + '</div>' + synth;
+                const synth = (msg.summary && msg.type === 'llm') ? '<div class="synth">✂️ ' + esc(msg.summary) + '</div>' : '';
+                div.innerHTML = '<span class="sender">' + esc(msg.sender) + ' <small style="font-weight:normal; color:var(--text-muted)">(' + esc(msg.timestamp) + ')</small></span><div class="content">' + esc(msg.text) + '</div>' + synth;
                 c.appendChild(div);
             });
             c.scrollTop = c.scrollHeight;
@@ -870,7 +876,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.8 cargado correctamente.");
+        console.log("✅ AI Council v0.8.1 cargado correctamente.");
     </script>
 </body>
 </html>
