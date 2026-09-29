@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Council v0.6</title>
+    <style>
+        :root {
+            --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
+            --primary: #3b82f6; --success: #22c55e; --warning: #f59e0b;
+            --danger: #ef4444; --border: #334155; --qwen: #8b5cf6;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { background-color: var(--panel); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .container { display: flex; flex: 1; overflow: hidden; }
+        aside { width: 300px; background-color: var(--panel); border-right: 1px solid var(--border); padding: 1rem; display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; }
+        main { flex: 1; display: flex; flex-direction: column; padding: 1rem 2rem; overflow: hidden; }
+        .chat-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding-bottom: 1rem; }
+        .message { background-color: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-width: 80%; }
+        .message.miche { align-self: flex-end; border-right: 4px solid var(--primary); }
+        .message.llm { align-self: flex-start; border-left: 4px solid var(--success); }
+        .message.qwen { border-left-color: var(--qwen); }
+        .message.system { align-self: center; background-color: #334155; font-size: 0.85rem; color: var(--text-muted); text-align: center; max-width: 90%; }
+        .message .sender { font-weight: bold; margin-bottom: 0.5rem; display: block; }
+        .message .content { white-space: pre-wrap; word-break: break-word; }
+        .message .synth { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.8rem; color: var(--qwen); }
+        .controls { background-color: var(--panel); border-top: 1px solid var(--border); padding: 1rem; border-radius: 8px; }
+        .prompt-box { background-color: #0f172a; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem; max-height: 200px; overflow-y: auto; color: #cbd5e1; }
+        textarea, input { width: 100%; background-color: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; box-sizing: border-box; font-family: inherit; }
+        button { background-color: var(--primary); color: white; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; }
+        button:hover { opacity: 0.9; }
+        button.secondary { background-color: #475569; }
+        button.danger { background-color: var(--danger); }
+        button.success { background-color: var(--success); }
+        button.tiny { padding: 2px 8px; font-size: 0.7rem; }
+        .btn-group { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; }
+        .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 2rem; width: 90%; max-width: 600px; display: flex; flex-direction: column; gap: 1rem; }
+        .participant-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: var(--bg); border-radius: 4px; }
+        .status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 99px; }
+        .status-absent { background: var(--danger); color: white; }
+        .hidden { display: none !important; }
+        .summary-section { background: #1a1a2e; border: 1px solid var(--qwen); border-radius: 4px; padding: 0.5rem; }
+        label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--qwen); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- Pantalla de Inicio -->
+    <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 1rem;">
+        <h1>🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.6</span></h1>
+        <input type="text" id="username-input" value="Miche" placeholder="Nombre de Usuario" style="width: 400px;">
+        <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 400px;">
+        <input type="text" id="context-input" placeholder="Contexto / Links" style="width: 400px;">
+        <button onclick="startDebate()">Iniciar Debate</button>
+    </div>
+
+    <!-- Interfaz Principal -->
+    <div id="main-app" class="hidden" style="display: flex; flex-direction: column; height: 100vh;">
+        <header>
+            <div>
+                <h2 style="margin: 0; font-size: 1.2rem;">🏛️ AI Council</h2>
+                <span id="cycle-indicator" style="color: var(--text-muted); font-size: 0.9rem;">Ciclo 1</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="secondary" onclick="exportDebate()">📄 Exportar .md</button>
+                <button class="danger" onclick="openFinalizeModal()">Finalizar Debate</button>
+            </div>
+        </header>
+
+        <div class="container">
+            <aside>
+                <h3 style="margin: 0;">Consejo Técnico
+                    <button class="secondary tiny" onclick="addParticipant()" title="Agregar participante">+</button>
+                    <button class="secondary tiny" onclick="removeParticipant()" title="Quitar participante">−</button>
+                </h3>
+                <div id="participants-list"></div>
+                <div class="summary-section">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--qwen);">📋 Resumen Acumulativo</h4>
+                    <div id="cumulative-summary-preview" style="font-size: 0.8rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: var(--text-muted);">Aún no se generó resumen.</div>
+                </div>
+                <div id="aside-tips" style="margin-top: auto; font-size: 0.8rem; color: var(--text-muted);">
+                    <div id="order-line"></div><br>
+                    💡 El ciclo cierra recién cuando <strong>todos los activos</strong> opinaron y Qwen generó el acumulativo.<br><br>
+                    💡 Un reincorporado habla inmediatamente después del hablante actual, y su prompt incluye las novedades posteriores a su snapshot.
+                </div>
+            </aside>
+
+            <main>
+                <div id="chat-container" class="chat-container"></div>
+
+                <div class="controls">
+                    <div id="turn-info" style="margin-bottom: 0.5rem; font-weight: bold; color: var(--warning);">Esperando inicio...</div>
+                    <div class="prompt-box" id="prompt-display"></div>
+                    <div class="btn-group"><button class="secondary" onclick="copyPrompt()">📋 Copiar Prompt</button></div>
+                    <hr style="border-color: var(--border); margin: 1rem 0;">
+                    <textarea id="response-input" rows="4" placeholder="Pega aquí la respuesta COMPLETA del LLM..."></textarea>
+                    <label class="mini">✂️ Resumen sintético (auto-extraído, editable). Es lo único que verá el próximo LLM:</label>
+                    <textarea id="summary-input" rows="2" placeholder="Se autocompleta al pegar la respuesta..."></textarea>
+                    <div id="qwen-summary-section" class="hidden">
+                        <label class="mini">📋 RESUMEN_ACUMULATIVO (auto-extraído de la respuesta de Qwen, editable):</label>
+                        <textarea id="qwen-summary-input" rows="6"></textarea>
+                    </div>
+                    <div class="btn-group"><button onclick="submitResponse()">Guardar Respuesta y Continuar ➡️</button></div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal Fin de Ciclo -->
+    <div id="cycle-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>🔄 Ciclo Completado</h3>
+            <p>Todos los LLMs activos hablaron en este ciclo y Qwen cerró con el acumulativo.</p>
+            <div class="btn-group" style="flex-direction: column;">
+                <button onclick="startNextCycle()">Continuar al Ciclo Siguiente ➡️</button>
+                <button class="secondary" onclick="showMicheIntervention()">✋ Intervenir como <span class="uname">Miche</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Intervención -->
+    <div id="intervention-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>✋ Intervención de <span class="uname">Miche</span></h3>
+            <textarea id="intervention-text" rows="4"></textarea>
+            <div class="btn-group">
+                <button onclick="submitIntervention()">Enviar e Iniciar Nuevo Ciclo</button>
+                <button class="secondary" onclick="closeModals()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Finalizar -->
+    <div id="finalize-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>🏁 Finalizar Debate</h3>
+            <p>¿Quién redactará las conclusiones y los próximos pasos?</p>
+            <div id="finalize-options" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"></div>
+            <button class="secondary" onclick="closeModals()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal Reincorporación -->
+    <div id="reintegration-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 700px;">
+            <h3>🔄 Reincorporación de <span id="reintegration-name"></span></h3>
+            <p>Copia este resumen y pégalo en el chat del LLM para que recupere el contexto.</p>
+            <textarea id="reintegration-summary" rows="12" readonly style="font-family: monospace; font-size: 0.85rem;"></textarea>
+            <div class="btn-group">
+                <button onclick="copyReintegrationSummary()">📋 Copiar Resumen</button>
+                <button class="secondary" onclick="closeModals()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ---------- ESTADO ----------
+        function defaultState() {
+            return {
+                userName: "Miche",
+                topic: "", context: "", cycle: 1, currentParticipantIndex: -1,
+                spokenThisCycle: [],
+                reinsertQueue: [],
+                participants: [
+                    { id: "chatgpt", name: "ChatGPT", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
+                    { id: "meta", name: "Meta", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
+                    { id: "gemini", name: "Gemini", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
+                    { id: "claude", name: "Claude", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
+                    { id: "qwen", name: "Qwen", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null }
+                ],
+                messages: [], cumulativeSummary: "", finalized: false
+            };
+        }
+        let state = defaultState();
+
+        const savedState = localStorage.getItem('michelab_council_v4');
+        if (savedState) {
+            state = JSON.parse(savedState);
+            // Migración no destructiva: conserva el debate vivo
+            if (!Array.isArray(state.spokenThisCycle)) state.spokenThisCycle = [];
+            if (!Array.isArray(state.reinsertQueue)) state.reinsertQueue = [];
+            if (!state.userName) state.userName = "Miche";
+            state.participants.forEach(p => { if (p.reintegratedAtMsgIndex === undefined) p.reintegratedAtMsgIndex = null; });
+            document.getElementById('init-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            renderAll();
+        }
+
+        function saveState() { localStorage.setItem('michelab_council_v4', JSON.stringify(state)); }
+        function now() { return new Date().toLocaleTimeString(); }
+        function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "p"; }
+
+        // ---------- EXTRACCIÓN DE RESÚMENES ----------
+        function extractSummary(text) {
+            if (!text || !text.trim()) return "";
+            const lines = text.split("\n").map(l => l.trim());
+            let idx = -1;
+            for (let i = lines.length - 1; i >= 0; i--) {
+                if (/^(resumen|síntesis|sintesis|tl;dr|en resumen)\s*:/i.test(lines[i])) { idx = i; break; }
+            }
+            let out;
+            if (idx !== -1) out = lines.slice(idx).filter(l => l).join(" ");
+            else out = lines.filter(l => l).slice(-2).join(" ");
+            return out.slice(0, 600);
+        }
+
+        function extractCumulative(text) {
+            if (!text) return "";
+            const lines = text.split("\n");
+            let start = -1, end = lines.length;
+            for (let i = 0; i < lines.length; i++) {
+                if (start === -1 && /resumen_acumulativo/i.test(lines[i])) { start = i; continue; }
+                if (start !== -1 && i > start && /^resumen\s*:/i.test(lines[i].trim())) { end = i; break; }
+            }
+            if (start === -1) return "";
+            return lines.slice(start, end).join("\n").trim().slice(0, 4000);
+        }
+
+        let summaryManuallyEdited = false;
+        let qwenManuallyEdited = false;
+        let cumulativeUpdatedCycle = 0;
+
+        document.getElementById('summary-input').addEventListener('input', () => { summaryManuallyEdited = true; });
+        document.getElementById('qwen-summary-input').addEventListener('input', () => { qwenManuallyEdited = true; });
+        document.getElementById('response-input').addEventListener('input', (e) => {
+            if (!summaryManuallyEdited) document.getElementById('summary-input').value = extractSummary(e.target.value);
+            if (isQwenTurn() && !qwenManuallyEdited) document.getElementById('qwen-summary-input').value = extractCumulative(e.target.value);
+        });
+
+        function resetInputs() {
+            document.getElementById('response-input').value = "";
+            document.getElementById('summary-input').value = "";
+            summaryManuallyEdited = false;
+            qwenManuallyEdited = false;
+        }
+
+        // ---------- CONSEJO DINÁMICO ----------
+        function addParticipant() {
+            const name = prompt("Nombre del nuevo participante (LLM o humano):");
+            if (!name || !name.trim()) return;
+            const clean = name.trim();
+            let id = slug(clean);
+            if (state.participants.some(p => p.id === id)) {
+                let n = 2;
+                while (state.participants.some(p => p.id === id + "-" + n)) n++;
+                id = id + "-" + n;
+            }
+            state.participants.push({ id: id, name: clean, active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null });
+            saveState(); renderAll();
+        }
+
+        function removeParticipant() {
+            if (state.participants.length <= 1) return alert("El consejo necesita al menos 1 participante.");
+            const list = state.participants.map((p, i) => (i + 1) + ". " + p.name).join("\n");
+            const sel = prompt("¿A quién quitás del consejo?\n\n" + list + "\n\nEscribí el número o el nombre exacto:");
+            if (!sel) return;
+            let idx = parseInt(sel, 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= state.participants.length) {
+                idx = state.participants.findIndex(p => p.name.toLowerCase() === sel.trim().toLowerCase());
+            }
+            if (idx === -1) return alert("No encontré ese participante.");
+            const p = state.participants[idx];
+            if (p.id === 'qwen' && !confirm("Qwen es quien cierra el ciclo con el RESUMEN_ACUMULATIVO. Sin él, la interfaz generará una síntesis automática al cierre. ¿Continuar?")) return;
+            const wasCurrent = state.currentParticipantIndex === idx;
+            state.participants.splice(idx, 1);
+            state.spokenThisCycle = state.spokenThisCycle.filter(id => id !== p.id);
+            state.reinsertQueue = state.reinsertQueue.filter(id => id !== p.id);
+            if (wasCurrent) {
+                state.currentParticipantIndex = Math.min(idx, state.participants.length) - 1;
+                advanceTurn();
+            } else if (state.currentParticipantIndex > idx) {
+                state.currentParticipantIndex--;
+            }
+            saveState(); renderAll();
+        }
+
+        // ---------- FLUJO ----------
+        function startDebate() {
+            const userName = document.getElementById('username-input').value.trim() || "Miche";
+            const topic = document.getElementById('topic-input').value.trim();
+            const context = document.getElementById('context-input').value.trim();
+            if (!topic) return alert("Por favor ingresa un tema.");
+            state.userName = userName;
+            state.topic = topic; state.context = context;
+            state.messages.push({ sender: userName, text: "Inicia el debate sobre: " + topic, summary: "Inicia el debate sobre: " + topic, type: "miche", timestamp: now(), cycle: state.cycle });
+            document.getElementById('init-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            const firstIdx = state.participants.findIndex(p => p.active);
+            state.currentParticipantIndex = firstIdx !== -1 ? firstIdx : -1;
+            saveState(); renderAll();
+        }
+
+        function pendingSpeakers() {
+            return state.participants.filter(p => p.active && !state.spokenThisCycle.includes(p.id));
+        }
+
+        function pickNext(startIdx, pending, queue) {
+            // 1) Reincorporados en espera (cola FIFO)
+            if (queue && queue.length) {
+                for (const id of queue) {
+                    const i = state.participants.findIndex(p => p.id === id);
+                    if (i !== -1 && pending.some(p => p.id === id)) return i;
+                }
+            }
+            // 2) Rotación natural; Qwen cierra
+            let pool = pending.filter(p => p.id !== 'qwen');
+            if (pool.length === 0) pool = pending;
+            for (let step = 1; step <= state.participants.length; step++) {
+                const i = (startIdx + step) % state.participants.length;
+                if (pool.some(p => p.id === state.participants[i].id)) return i;
+            }
+            return state.participants.findIndex(p => p.id === pool[0].id);
+        }
+
+        function advanceTurn() {
+            const pending = pendingSpeakers();
+            if (pending.length === 0) {
+                if (cumulativeUpdatedCycle !== state.cycle) {
+                    const auto = "## Síntesis automática del Ciclo " + state.cycle + ":\n" + cycleSynthesis();
+                    state.cumulativeSummary = (state.cumulativeSummary ? state.cumulativeSummary + "\n" : "") + auto;
+                }
+                state.currentParticipantIndex = -1;
+                document.getElementById('cycle-modal').style.display = 'flex';
+                return;
+            }
+            state.currentParticipantIndex = pickNext(state.currentParticipantIndex, pending, state.reinsertQueue);
+        }
+
+        // Simula la rotación restante SIN mutar el estado (para el cartel "A continuación")
+        function rotationPreview() {
+            const spoken = state.spokenThisCycle.slice();
+            const cur = state.participants[state.currentParticipantIndex];
+            if (cur) spoken.push(cur.id);
+            const queue = state.reinsertQueue.slice();
+            let lastIdx = state.currentParticipantIndex;
+            const names = [];
+            for (let guard = 0; guard < state.participants.length; guard++) {
+                const pending = state.participants.filter(p => p.active && !spoken.includes(p.id));
+                if (pending.length === 0) break;
+                const idx = pickNext(lastIdx, pending, queue);
+                const picked = state.participants[idx];
+                names.push(picked.name);
+                spoken.push(picked.id);
+                const qi = queue.indexOf(picked.id); if (qi !== -1) queue.splice(qi, 1);
+                lastIdx = idx;
+            }
+            return names;
+        }
+
+        function isQwenTurn() {
+            const p = state.participants[state.currentParticipantIndex];
+            return p && p.id === 'qwen';
+        }
+
+        function submitResponse() {
+            const response = document.getElementById('response-input').value.trim();
+            if (!response) return alert("Pega la respuesta del LLM primero.");
+            const summary = document.getElementById('summary-input').value.trim() || extractSummary(response);
+            const currentP = state.participants[state.currentParticipantIndex];
+            state.messages.push({ sender: currentP.name, text: response, summary: summary, type: "llm", timestamp: now(), cycle: state.cycle });
+            if (!state.spokenThisCycle.includes(currentP.id)) state.spokenThisCycle.push(currentP.id);
+            state.reinsertQueue = state.reinsertQueue.filter(id => id !== currentP.id);
+            currentP.reintegratedAtMsgIndex = null; // ya resincronizado: habló
+
+            if (isQwenTurn()) {
+                const cum = document.getElementById('qwen-summary-input').value.trim() || extractCumulative(response);
+                if (cum) { state.cumulativeSummary = cum; cumulativeUpdatedCycle = state.cycle; }
+                document.getElementById('qwen-summary-input').value = "";
+                qwenManuallyEdited = false;
+            }
+            resetInputs();
+            advanceTurn();
+            saveState(); renderAll();
+        }
+
+        function startNextCycle() {
+            closeModals();
+            state.cycle++;
+            state.spokenThisCycle = [];
+            state.reinsertQueue = [];
+            state.participants.forEach(p => { p.reintegratedAtMsgIndex = null; });
+            cumulativeUpdatedCycle = 0;
+            const firstIdx = state.participants.findIndex(p => p.active);
+            state.currentParticipantIndex = firstIdx !== -1 ? firstIdx : -1;
+            saveState(); renderAll();
+        }
+
+        function showMicheIntervention() { closeModals(); document.getElementById('intervention-modal').style.display = 'flex'; }
+
+        function submitIntervention() {
+            const text = document.getElementById('intervention-text').value.trim();
+            if (!text) return;
+            closeModals();
+            state.cycle++;
+            state.spokenThisCycle = [];
+            state.reinsertQueue = [];
+            state.participants.forEach(p => { p.reintegratedAtMsgIndex = null; });
+            cumulativeUpdatedCycle = 0;
+            state.messages.push({ sender: state.userName, text: text, summary: text, type: "miche", timestamp: now(), cycle: state.cycle });
+            const firstIdx = state.participants.findIndex(p => p.active);
+            state.currentParticipantIndex = firstIdx !== -1 ? firstIdx : -1;
+            document.getElementById('intervention-text').value = "";
+            saveState(); renderAll();
+        }
+
+        function toggleParticipant(id) {
+            const idx = state.participants.findIndex(x => x.id === id);
+            const p = state.participants[idx];
+            p.active = !p.active;
+            if (!p.active) {
+                p.leftAtMsgIndex = state.messages.length;
+                p.leftAtTime = now();
+                p.reintegratedAtMsgIndex = null;
+                state.reinsertQueue = state.reinsertQueue.filter(x => x !== p.id);
+                const tag = "[TAG_AUSENCIA: " + p.name + " - " + p.leftAtTime + " - Ciclo " + state.cycle + "]";
+                state.cumulativeSummary = (state.cumulativeSummary ? state.cumulativeSummary + "\n" : "") + tag;
+                state.messages.push({ sender: "Sistema", text: "⚠️ " + p.name + " ha sido deshabilitado (límite de tokens). Se agregó TAG de ausencia al resumen acumulativo.", type: "system", timestamp: now(), cycle: state.cycle });
+                if (state.currentParticipantIndex === idx) advanceTurn();
+            } else {
+                state.messages.push({ sender: "Sistema", text: "✅ " + p.name + " ha vuelto al consejo.", type: "system", timestamp: now(), cycle: state.cycle });
+                showReintegrationModal(p);
+                p.leftAtMsgIndex = null; p.leftAtTime = null;
+                p.reintegratedAtMsgIndex = state.messages.length; // snapshot: desde acá se sincroniza en vivo
+                if (!state.reinsertQueue.includes(p.id)) state.reinsertQueue.push(p.id);
+                // Si Qwen estaba por cerrar y NO hay respuesta en vuelo pegada, el reincorporado habla antes
+                const cur = state.participants[state.currentParticipantIndex];
+                const boxEmpty = document.getElementById('response-input').value.trim() === "";
+                if (cur && cur.id === 'qwen' && !state.spokenThisCycle.includes('qwen') && !state.spokenThisCycle.includes(p.id) && boxEmpty) {
+                    state.currentParticipantIndex = idx;
+                    state.reinsertQueue = state.reinsertQueue.filter(x => x !== p.id);
+                    p.reintegratedAtMsgIndex = null;
+                }
+            }
+            saveState(); renderAll();
+        }
+
+        function showReintegrationModal(participant) {
+            document.getElementById('reintegration-name').textContent = participant.name;
+            const missed = state.messages.slice(participant.leftAtMsgIndex);
+            let summary = "## 📄 Reincorporación de " + participant.name + "\n\n";
+            summary += "Te ausentaste a las " + participant.leftAtTime + " (Ciclo " + state.cycle + ").\n\n";
+            summary += "## RESUMEN_ACUMULATIVO:\n" + (state.cumulativeSummary || "(vacío)") + "\n\n";
+            summary += "## LO QUE TE PERDISTE:\n";
+            missed.forEach(msg => { if (msg.type !== 'system') summary += "**" + msg.sender + "**: " + (msg.summary || msg.text) + "\n\n"; });
+            const paraLines = [];
+            missed.forEach(msg => {
+                msg.text.split("\n").forEach(l => { if (l.includes("PARA " + participant.name + ":")) paraLines.push(l.trim()); });
+            });
+            if (paraLines.length) summary += "## NOTAS DIRIGIDAS A VOS:\n" + paraLines.join("\n") + "\n\n";
+            summary += "---\nRetomá el debate desde tu TAG de ausencia. Cuando te llegue tu prompt de turno, incluirá además las NOVEDADES posteriores a este resumen.";
+            document.getElementById('reintegration-summary').value = summary;
+            document.getElementById('reintegration-modal').style.display = 'flex';
+        }
+
+        function openFinalizeModal() {
+            const c = document.getElementById('finalize-options'); c.innerHTML = "";
+            state.participants.forEach(p => {
+                if (p.active) {
+                    const b = document.createElement('button'); b.textContent = p.name;
+                    b.onclick = () => finalizeDebate(p); c.appendChild(b);
+                }
+            });
+            document.getElementById('finalize-modal').style.display = 'flex';
+        }
+
+        function finalizeDebate(participant) {
+            closeModals();
+            const prompt = "Eres " + participant.name + ". El debate sobre \"" + state.topic + "\" ha finalizado.\nRedacta un Markdown con: 1) Conclusiones, 2) Acuerdos/desacuerdos, 3) Próximos pasos para " + state.userName + ".\n\nRESUMEN_ACUMULATIVO:\n" + state.cumulativeSummary + "\n\nSÍNTESIS FINAL DEL CICLO " + state.cycle + ":\n" + cycleSynthesis();
+            navigator.clipboard.writeText(prompt).catch(err => console.warn("No se pudo copiar:", err));
+            const exportFirst = confirm(
+                "📋 Prompt de finalización para " + participant.name + " copiado al portapapeles.\n\n" +
+                "¿Querés exportar la transcripción del debate a .md antes de volver al inicio?\n\n" +
+                "[Aceptar] = Exportar y volver al inicio\n[Cancelar] = Volver al inicio sin exportar"
+            );
+            if (exportFirst) exportDebate();
+            resetToInit();
+        }
+
+        function resetToInit() {
+            closeModals();
+            localStorage.removeItem('michelab_council_v4');
+            state = defaultState();
+            cumulativeUpdatedCycle = 0;
+            resetInputs();
+            document.getElementById('qwen-summary-input').value = "";
+            document.getElementById('username-input').value = "Miche";
+            document.getElementById('topic-input').value = "";
+            document.getElementById('context-input').value = "";
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('init-screen').classList.remove('hidden');
+        }
+
+        function exportDebate() {
+            let md = "# 🏛️ AI Council - Debate\n\n**Moderador:** " + state.userName + "\n**Tema:** " + state.topic + "\n**Contexto:** " + state.context + "\n**Ciclos:** " + state.cycle + "\n**Exportado:** " + new Date().toLocaleString() + "\n\n---\n\n## 📋 Resumen Acumulativo\n\n" + (state.cumulativeSummary || "(vacío)") + "\n\n---\n\n## 💬 Transcripción Completa\n\n";
+            state.messages.forEach(msg => {
+                md += "### " + msg.sender + " (" + msg.timestamp + ")\n" + msg.text + "\n";
+                if (msg.summary && msg.type !== 'system') md += "\n> ✂️ Síntesis: " + msg.summary + "\n";
+                md += "\n";
+            });
+            const blob = new Blob([md], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url;
+            a.download = "debate_" + Date.now() + ".md"; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ---------- RENDER ----------
+        function cycleSynthesis() {
+            return state.messages.filter(m => m.cycle === state.cycle && m.type !== 'system')
+                .map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n");
+        }
+
+        function renderAll() {
+            document.querySelectorAll('.uname').forEach(el => { el.textContent = state.userName; });
+            renderParticipants(); renderChat(); renderControls(); renderCumulativeSummary();
+        }
+
+        function renderParticipants() {
+            const list = document.getElementById('participants-list'); list.innerHTML = "";
+            state.participants.forEach(p => {
+                const div = document.createElement('div'); div.className = 'participant-item';
+                div.innerHTML = "<span>" + p.name + (!p.active ? ' <span class="status-badge status-absent">Ausente</span>' : '') + "</span>" +
+                    "<button class=\"" + (p.active ? 'danger' : 'success') + " tiny\" onclick=\"toggleParticipant('" + p.id + "')\">" + (p.active ? 'Deshabilitar' : 'Reintegrar') + "</button>";
+                list.appendChild(div);
+            });
+            document.getElementById('cycle-indicator').textContent = "Ciclo " + state.cycle;
+            const hasQwen = state.participants.some(p => p.id === 'qwen');
+            document.getElementById('order-line').innerHTML = "💡 <strong>Orden base:</strong> " + state.participants.map(p => p.name).join(" → ") + (hasQwen ? ' <span style="color:var(--qwen)">(Qwen cierra)</span>' : ' <span style="color:var(--warning)">(sin Qwen: síntesis automática)</span>');
+        }
+
+        function renderChat() {
+            const c = document.getElementById('chat-container'); c.innerHTML = "";
+            state.messages.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = "message " + msg.type + (msg.sender === 'Qwen' ? ' qwen' : '');
+                const synth = (msg.summary && msg.type === 'llm') ? '<div class="synth">✂️ ' + msg.summary + '</div>' : '';
+                div.innerHTML = '<span class="sender">' + msg.sender + ' <small style="font-weight:normal; color:var(--text-muted)">(' + msg.timestamp + ')</small></span><div class="content">' + msg.text + '</div>' + synth;
+                c.appendChild(div);
+            });
+            c.scrollTop = c.scrollHeight;
+        }
+
+        function renderControls() {
+            const ti = document.getElementById('turn-info');
+            const pd = document.getElementById('prompt-display');
+            if (state.finalized) { ti.textContent = "🏁 Debate finalizado."; pd.textContent = ""; return; }
+            if (state.currentParticipantIndex === -1) { ti.textContent = "⏸️ Ciclo completado. Esperando tu decisión."; pd.textContent = ""; return; }
+
+            const p = state.participants[state.currentParticipantIndex];
+            const preview = rotationPreview();
+            ti.textContent = "🎤 Turno actual: " + p.name + (preview.length ? " · A continuación: " + preview.join(" → ") : " · cierra el ciclo");
+            document.getElementById('qwen-summary-section').classList.toggle('hidden', !isQwenTurn());
+
+            let prompt = "Contexto del proyecto: " + state.context + "\nTema del debate: " + state.topic + "\n\n";
+            if (state.cumulativeSummary) prompt += "## RESUMEN ACUMULATIVO (ciclos anteriores y ausencias):\n" + state.cumulativeSummary + "\n\n";
+            prompt += "## SÍNTESIS DEL CICLO ACTUAL (Ciclo " + state.cycle + "):\n" + (cycleSynthesis() || "(aún nadie habló)") + "\n";
+
+            // Resincronización en vivo para reincorporados
+            if (p.reintegratedAtMsgIndex != null) {
+                const news = state.messages.slice(p.reintegratedAtMsgIndex).filter(m => m.type !== 'system');
+                if (news.length) {
+                    prompt += "\n## NOVEDADES DESDE TU REINCORPORACIÓN:\n" + news.map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n") + "\n";
+                }
+            }
+
+            const absentees = state.participants.filter(x => !x.active);
+            if (absentees.length > 0) {
+                prompt += "\n⚠️ AUSENTES por límite de tokens: " + absentees.map(a => a.name + " (desde " + a.leftAtTime + ")").join(', ') + ".\nSi mencionás algo crítico para alguno, agregá una línea \"PARA [Nombre]: ...\" (máx 1 línea c/u).\n";
+            }
+
+            if (isQwenTurn()) {
+                prompt += "\n## TU ROL ESPECIAL (Qwen, cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que incluya: ciclos anteriores + este ciclo (todas las opiniones, incluida la de reincorporados) + decisiones tomadas + pendientes + TAGs de ausencia. La interfaz la capturará automáticamente.\n";
+            } else {
+                prompt += "\nTu turno, " + p.name + ". Respondé al último punto con tu opinión técnica.\n";
+            }
+            prompt += "\n## INSTRUCCIÓN OBLIGATORIA: Terminá tu respuesta con una línea que empiece con \"RESUMEN:\" seguida de máx 2 líneas sintetizando tu postura.";
+            pd.textContent = prompt;
+        }
+
+        function renderCumulativeSummary() {
+            const el = document.getElementById('cumulative-summary-preview');
+            el.textContent = state.cumulativeSummary ? state.cumulativeSummary : "Aún no se generó resumen.";
+        }
+
+        function copyPrompt() { navigator.clipboard.writeText(document.getElementById('prompt-display').textContent); alert("Prompt copiado."); }
+        function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value); alert("Resumen copiado."); }
+        function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
+
+        console.log("✅ AI Council v0.6 cargado correctamente.");
+    </script>
+</body>
+</html>
