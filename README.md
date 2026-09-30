@@ -265,6 +265,7 @@ Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve p
 | v0.11 | Chequeo determinista del acumulativo: atribuciones imposibles o sin respaldo, ciclos inexistentes, omisiones, "Decisiones tomadas" y `D#` inexistentes; TAGs perdidos re-agregados; prompt de corrección para el resumidor. |
 | v0.12 | Menos fricción: todos los adjuntos en una línea (`ADJUNTAR: *`), detección tolerante y aviso de archivos inexistentes, atajos Alt+C / Ctrl+Enter / Esc, avisos no bloqueantes, `**RESUMEN:**` en negrita reconocido. |
 | v0.13 | Tras el primer debate real con la herramienta: parser tolerante sin descartes silenciosos, `RETIRO:`, consenso visual (unánime / casi / disputada) con contador, cartel y resolución en lote; archivos durante el debate; regeneración reducida y prompts divididos en partes; condensación automática del acumulativo; chequeo de estados y autorías del registro; vuelta a ciegas sin números de propuesta; Esc ya no deja trabado el cierre de ciclo. |
+| v0.13.1 | Pantalla de inicio rediseñada (tarjetas, integrantes como chips, switch para la vuelta a ciegas, botón destacado). Solo cambia HTML/CSS del inicio: la lógica es idéntica a v0.13 (verificado token por token). |
 
 ---
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.13</title>
+    <title>AI Council v0.13.1</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -68,39 +68,310 @@
         label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--summ); font-weight: bold; }
         .init-box { width: 420px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
         .init-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border-radius: 4px; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+      /* ===== KIT INIT (pantalla de inicio) ===== */
+      #init-screen {
+        background:
+          radial-gradient(
+            900px 480px at 50% -80px,
+            #172440 0%,
+            transparent 70%
+          ),
+          var(--bg);
+      }
+      .ver-pill {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        vertical-align: middle;
+      }
+      .init-wrap {
+        width: min(640px, 92vw);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 28px 0;
+      }
+      .init-field label {
+        display: block;
+        font-size: 0.68rem;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin: 0 0 4px 2px;
+      }
+      #init-screen input[type="text"],
+      #init-screen textarea,
+      #init-screen select {
+        background: #0b1220;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 0.55rem 0.7rem;
+        width: 100%;
+        box-sizing: border-box;
+        font-family: inherit;
+        font-size: 0.9rem;
+      }
+      #init-screen input:focus,
+      #init-screen textarea:focus,
+      #init-screen select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+      }
+      .init-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .init-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .init-card-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      .init-card-hint,
+      .hint-inline {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        font-weight: 400;
+      }
+      .file-drop {
+        border: 1px dashed var(--border);
+        border-radius: 8px;
+        padding: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        background: #0b1220;
+      }
+      .add-row {
+        display: flex;
+        gap: 8px;
+      }
+      .add-row input {
+        flex: 1;
+      }
+      /* participantes como chips */
+      #init-participants-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      #init-participants-list .init-row {
+        width: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #0b1220;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 6px 4px 12px;
+        font-size: 0.85rem;
+      }
+      #init-participants-list .init-row button {
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border-radius: 50%;
+        line-height: 1;
+        font-size: 0.7rem;
+      }
+      /* archivos prolijos */
+      #init-files-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #init-files-list .init-row {
+        background: #0b1220;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+      }
+      /* switch del ciclo a ciegas */
+      .toggle-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        background: #0b1220;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+      .toggle-row .t-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .toggle-row .t-sub {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+      .switch {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex: none;
+      }
+      .switch input {
+        position: absolute;
+        opacity: 0;
+        inset: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+      .switch .track {
+        position: absolute;
+        inset: 0;
+        background: #334155;
+        border-radius: 999px;
+        transition: 0.18s;
+        pointer-events: none;
+      }
+      .switch .track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #94a3b8;
+        transition: 0.18s;
+      }
+      .switch input:checked + .track {
+        background: var(--primary);
+      }
+      .switch input:checked + .track::after {
+        left: 21px;
+        background: #fff;
+      }
+      /* CTA */
+      .cta {
+        width: 100%;
+        padding: 0.8rem 1rem;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: #fff;
+        background: linear-gradient(135deg, var(--primary), #7c3aed);
+      }
+      .cta:hover {
+        filter: brightness(1.1);
+      }
     </style>
 </head>
 <body>
 
     <!-- Pantalla de Inicio -->
-    <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.13</span></h1>
-        <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
-        <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
-        <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
-
-        <div class="init-box">
-            <strong>📎 Archivos de contexto (opcionales — cualquier extensión se lee como .txt)</strong>
-            <input type="file" id="file-input" multiple onchange="handleFileInput(event)" style="font-size: 0.8rem;">
-            <div id="init-files-list" style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.3rem;"></div>
+    <div
+      id="init-screen"
+      style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        overflow-y: auto;
+      "
+    >
+      <div class="init-wrap">
+        <div style="text-align: center; margin-bottom: 4px">
+          <h1 style="margin: 0; font-size: 1.6rem">🏛️ AI Council</h1>
+          <span class="ver-pill">v0.13.1</span>
+        </div>
+        <div class="init-field">
+          <label for="username-input">Moderador</label>
+          <input type="text" id="username-input" value="" placeholder="Tu nombre" />
+        </div>
+        <div class="init-field">
+          <label for="topic-input">Tema del debate</label>
+          <input
+            type="text"
+            id="topic-input"
+            placeholder="¿Qué se discute hoy?"
+          />
+        </div>
+        <div class="init-field">
+          <label for="context-input">Contexto / Links</label>
+          <textarea
+            id="context-input"
+            rows="2"
+            placeholder="URLs, notas, alcance..."
+          ></textarea>
         </div>
 
-        <div class="init-box">
-            <strong>👥 Integrantes del consejo (editá antes de iniciar)</strong>
-            <div id="init-participants-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
-            <div style="display: flex; gap: 0.5rem;">
-                <input type="text" id="init-new-participant" placeholder="Nombre (LLM o humano)">
-                <button class="secondary" onclick="initAddParticipant()">+ Agregar</button>
-            </div>
-            <label class="mini" style="margin-top: 0.5rem;">🧠 Quién cierra los ciclos y genera el RESUMEN_ACUMULATIVO:</label>
+        <div class="init-card">
+          <div class="init-card-head">
+            <span class="init-card-title">📎 Archivos de contexto</span>
+            <span class="init-card-hint">cualquier extensión → .txt</span>
+          </div>
+          <input
+            type="file"
+            id="file-input"
+            multiple
+            onchange="handleFileInput(event)"
+            class="file-drop"
+          />
+          <div id="init-files-list"></div>
+        </div>
+
+        <div class="init-card">
+          <div class="init-card-head">
+            <span class="init-card-title">👥 Consejo técnico</span>
+            <span class="init-card-hint">editá antes de iniciar</span>
+          </div>
+          <div id="init-participants-list"></div>
+          <div class="add-row">
+            <input
+              type="text"
+              id="init-new-participant"
+              placeholder="Nombre (LLM o humano)"
+            />
+            <button class="secondary" onclick="initAddParticipant()">
+              + Agregar
+            </button>
+          </div>
+          <div class="init-field">
+            <label for="init-summarizer">🧠 Cierra los ciclos y resume</label>
             <select id="init-summarizer"></select>
-            <label style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; margin-top: 0.5rem;">
-                <input type="checkbox" id="init-blind" checked style="width: auto;">
-                🙈 Primera vuelta a ciegas (en el Ciclo 1 nadie ve las respuestas de los demás; evita que el primero en hablar marque el rumbo)
-            </label>
+          </div>
+          <label class="toggle-row">
+            <span
+              ><span class="t-title">Primer ciclo a ciegas</span>
+              <span class="t-sub"
+                >En el Ciclo 1 nadie ve las respuestas de los demás.</span
+              ></span
+            >
+            <span class="switch"
+              ><input type="checkbox" id="init-blind" checked /><span
+                class="track"
+              ></span
+            ></span>
+          </label>
         </div>
 
-        <button onclick="startDebate()">Iniciar Debate</button>
+        <button class="cta" onclick="startDebate()">Iniciar Debate</button>
+      </div>
     </div>
 
     <!-- Interfaz Principal -->
@@ -1681,7 +1952,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value).then(() => toast("📋 Resumen copiado")).catch(() => toast("No se pudo copiar: seleccionalo a mano.")); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.13 cargado correctamente.");
+        console.log("✅ AI Council v0.13.1 cargado correctamente.");
     </script>
 </body>
 </html>
