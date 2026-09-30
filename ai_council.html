@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Council v0.12</title>
+    <title>AI Council v0.13</title>
     <style>
         :root {
             --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8;
@@ -25,7 +25,7 @@
         .message .content { white-space: pre-wrap; word-break: break-word; }
         .message .synth { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.8rem; color: var(--summ); }
         .controls { background-color: var(--panel); border-top: 1px solid var(--border); padding: 1rem; border-radius: 8px; }
-        .prompt-box { background-color: #0f172a; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem; max-height: 200px; overflow-y: auto; color: #cbd5e1; }
+        .prompt-box { background-color: #0f172a; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem; max-height: 200px; overflow-y: auto; color: #cbd5e1; white-space: pre-wrap; word-break: break-word; }
         textarea, input, select { width: 100%; background-color: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; box-sizing: border-box; font-family: inherit; }
         button { background-color: var(--primary); color: white; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; }
         button:hover { opacity: 0.9; }
@@ -50,7 +50,19 @@
         .ledger-item .lmeta { color: var(--text-muted); }
         .lstatus { font-size: 0.65rem; padding: 1px 6px; border-radius: 99px; color: white; margin-left: 0.3rem; }
         .st-PROPUESTA { background: #475569; } .st-DISPUTADA { background: var(--warning); }
-        .st-ACORDADA { background: var(--success); } .st-RECHAZADA { background: var(--danger); } .st-REEMPLAZADA { background: #6b7280; }
+        .st-ACORDADA { background: var(--success); } .st-RECHAZADA { background: var(--danger); } .st-REEMPLAZADA { background: #6b7280; } .st-RETIRADA { background: #6b7280; }
+        .ledger-item.lv-unanime { border: 2px solid var(--success); background: #0f2a1a; }
+        .ledger-item.lv-casi { border: 2px solid #14b8a6; background: #0f2626; }
+        .ledger-item.lv-disputada { border: 1px solid var(--warning); }
+        .ledger-item.lv-cerrada { opacity: 0.55; }
+        .cbadge { font-size: 0.7rem; font-weight: bold; padding: 1px 7px; border-radius: 99px; margin-left: 0.3rem; }
+        .cb-unanime { background: var(--success); color: white; } .cb-casi { background: #14b8a6; color: white; }
+        .cb-disputada { background: var(--warning); color: black; } .cb-debate { background: #334155; color: var(--text); }
+        .ledger-stats { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; font-size: 0.72rem; }
+        .ledger-stats span { background: var(--bg); border-radius: 4px; padding: 2px 6px; }
+        #gov-banner { background: #14532d; border: 2px solid var(--success); border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 0.6rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-weight: bold; }
+        .gov-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; background: var(--bg); border-radius: 4px; padding: 0.4rem 0.6rem; font-size: 0.82rem; }
+        .parts-nav { display: flex; align-items: center; gap: 0.5rem; background: #3b2f0e; border: 1px solid var(--warning); border-radius: 4px; padding: 0.3rem 0.6rem; margin-bottom: 0.5rem; font-size: 0.82rem; }
         .summary-section { background: #1a1a2e; border: 1px solid var(--summ); border-radius: 4px; padding: 0.5rem; }
         .files-section { background: #1a2e1a; border: 1px solid var(--primary); border-radius: 4px; padding: 0.5rem; }
         label.mini { display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--summ); font-weight: bold; }
@@ -62,7 +74,7 @@
 
     <!-- Pantalla de Inicio -->
     <div id="init-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.8rem; overflow-y: auto; padding: 2rem 0;">
-        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.12</span></h1>
+        <h1 style="margin: 0;">🏛️ AI Council <span style="font-size: 0.8rem; color: var(--text-muted);">v0.13</span></h1>
         <input type="text" id="username-input" value="" placeholder="Tu nombre (moderador)" style="width: 420px;">
         <input type="text" id="topic-input" placeholder="Tema del debate" style="width: 420px;">
         <textarea id="context-input" rows="2" placeholder="Contexto / Links" style="width: 420px;"></textarea>
@@ -111,8 +123,11 @@
                     <button class="secondary tiny" onclick="removeParticipant()" title="Quitar participante">−</button>
                 </h3>
                 <div id="participants-list"></div>
-                <div id="files-section" class="files-section hidden">
-                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">📎 Archivos de contexto</h4>
+                <div id="files-section" class="files-section">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">📎 Archivos de contexto
+                        <button class="secondary tiny" onclick="document.getElementById('midfile-input').click()" title="Subir archivo durante el debate">+ Agregar</button>
+                    </h4>
+                    <input type="file" id="midfile-input" multiple onchange="handleMidDebateFiles(event)" style="display: none;">
                     <div id="files-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
                 </div>
                 <div class="ledger-section">
@@ -131,12 +146,14 @@
             </aside>
 
             <main>
+                <div id="gov-banner" class="hidden"></div>
                 <div id="chat-container" class="chat-container"></div>
 
                 <div class="controls">
                     <div id="turn-info" style="margin-bottom: 0.5rem; font-weight: bold; color: var(--warning);">Esperando inicio...</div>
+                    <div id="parts-nav" class="parts-nav hidden"></div>
                     <div class="prompt-box" id="prompt-display"></div>
-                    <div class="btn-group" style="align-items: center;"><button class="secondary" onclick="copyPrompt()">📋 Copiar Prompt</button><small style="color: var(--text-muted);"><kbd>Alt</kbd>+<kbd>C</kbd></small></div>
+                    <div class="btn-group" style="align-items: center;"><button class="secondary" onclick="copyPrompt()">📋 Copiar Prompt</button><small style="color: var(--text-muted);"><kbd>Alt</kbd>+<kbd>C</kbd></small><small style="color: var(--text-muted); margin-left: auto;">Máx. caracteres por mensaje: <input type="number" id="max-part-input" min="2000" step="1000" style="width: 90px; padding: 2px 4px;" onchange="setMaxPart(this.value)"></small></div>
                     <hr style="border-color: var(--border); margin: 1rem 0;">
                     <textarea id="response-input" rows="4" placeholder="Pega aquí la respuesta COMPLETA del LLM..."></textarea>
                     <label class="mini">✂️ Resumen sintético (auto-extraído, editable). Es lo único que verá el próximo LLM:</label>
@@ -156,6 +173,7 @@
         <div class="modal">
             <h3>🔄 Ciclo Completado</h3>
             <p>Todos los LLMs activos hablaron en este ciclo y el resumidor cerró con el acumulativo.</p>
+            <div id="cycle-gov-note"></div>
             <div class="btn-group" style="flex-direction: column;">
                 <button onclick="startNextCycle()">Continuar al Ciclo Siguiente ➡️</button>
                 <button class="secondary" onclick="showModeratorIntervention()">✋ Intervenir como <span class="uname">Moderador</span></button>
@@ -207,6 +225,15 @@
         </div>
     </div>
 
+    <div id="gov-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 760px;">
+            <h3>⚖️ Propuestas para resolver</h3>
+            <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">Solo vos acordás. Acá está lo que el consejo ya dejó listo para una decisión tuya.</p>
+            <div id="gov-body" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 60vh; overflow-y: auto;"></div>
+            <button class="secondary" onclick="closeGov()">Cerrar</button>
+        </div>
+    </div>
+
     <div id="check-modal" class="modal-overlay">
         <div class="modal" style="max-width: 720px;">
             <h3>🔎 Chequeo del RESUMEN_ACUMULATIVO</h3>
@@ -246,6 +273,8 @@
                 blindFirstCycle: false,
                 decisions: [],
                 pendingCorrection: null,
+                missingRequests: [],
+                maxPartChars: 12000,
                 participants: [
                     { id: "chatgpt", name: "ChatGPT", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
                     { id: "meta", name: "Meta", active: true, leftAtMsgIndex: null, leftAtTime: null, reintegratedAtMsgIndex: null },
@@ -291,6 +320,8 @@
             if (!state.userName) state.userName = "Moderador";
             if (typeof state.blindFirstCycle !== 'boolean') state.blindFirstCycle = false;
             if (!Array.isArray(state.decisions)) state.decisions = [];
+            if (!Array.isArray(state.missingRequests)) state.missingRequests = [];
+            if (!state.maxPartChars) state.maxPartChars = 12000;
             if (!state.summarizerId) {
                 const last = state.participants[state.participants.length - 1];
                 state.summarizerId = last ? last.id : null;
@@ -405,8 +436,9 @@
         // ---------- REGISTRO DE DECISIONES ----------
         // Lo mantiene la interfaz (sin LLM). Los LLM solo proponen, apoyan u objetan; los estados finales los pone el moderador.
         const OPEN_STATES = ['PROPUESTA', 'DISPUTADA'];
-        function cleanMarkerLine(l) { return String(l).replace(/\*\*/g, "").replace(/^[\s>*\-•]+/, "").trim(); }
-        function isLedgerLine(l) { return /^(PROPONGO(\s*\(\s*reemplaza\s+D\d+\s*\))?|APOYO|OBJETO)\s*:/i.test(cleanMarkerLine(l)); }
+        function cleanMarkerLine(l) { return String(l).replace(/\*\*/g, "").replace(/^[\s>*\-•#]+/, "").trim(); }
+        const MARKER_WORD_RE = /^(PROPONGO|PROPUESTA|APOYO|APOYA|OBJETO|OBJECI[OÓ]N|RETIRO|RETIRA)\b/i;
+        function isLedgerLine(l) { return /^(PROPONGO\s*(\([^)]*\))?|APOYO|OBJETO|RETIRO)\s*:/i.test(cleanMarkerLine(l)); }
         function findDecision(id) { return state.decisions.find(d => d.id.toUpperCase() === String(id).toUpperCase()); }
         function sysMsg(text) { state.messages.push({ sender: "Sistema", text: text, type: "system", timestamp: now(), cycle: state.cycle }); }
 
@@ -422,15 +454,45 @@
             recomputeStatus(d);
         }
 
+        // Lee IDs al comienzo de un texto ("D4/D5/D6 — motivo", "D2, D3 (en parte) ..."). Devuelve {ids, rest}.
+        function leadingIds(t) {
+            const m = String(t).match(/^\s*((?:D\d+\s*(?:[,/&]|\by\b)?\s*)+)/i);
+            if (!m) return { ids: [], rest: String(t).trim() };
+            const ids = [...new Set((m[1].match(/D\d+/gi) || []).map(x => x.toUpperCase()))];
+            const rest = String(t).slice(m[0].length).replace(/^[\s—–:\-.]+/, "").trim();
+            return { ids: ids, rest: rest };
+        }
+
         function processLedgerMarkers(text, who) {
             const notes = [];
-            String(text || "").split("\n").forEach(raw => {
-                const l = cleanMarkerLine(raw);
+            const lines = String(text || "").split("\n");
+            for (let i = 0; i < lines.length; i++) {
+                const l = cleanMarkerLine(lines[i]);
+                if (!l || !MARKER_WORD_RE.test(l)) continue;
                 let m;
-                if ((m = l.match(/^PROPONGO(?:\s*\(\s*reemplaza\s+(D\d+)\s*\))?\s*:\s*(.+)$/i))) {
-                    const txt = m[2].trim();
+                if ((m = l.match(/^PROPONGO\s*(?:\(([^)]*)\))?\s*:\s*(.*)$/i))) {
+                    let txt = m[2].trim();
+                    // Propuestas de varias líneas: si termina en ":" o sigue una lista, se juntan las líneas siguientes
+                    const nextRaw = (lines[i + 1] || "").trim();
+                    if (!txt || /:$/.test(txt) || /^([-*•]|\d+[.)])\s/.test(nextRaw)) {
+                        const extra = [];
+                        let j = i + 1;
+                        while (j < lines.length) {
+                            const raw = lines[j].trim();
+                            if (!raw) { if (extra.length) break; j++; continue; }
+                            const cl = cleanMarkerLine(raw);
+                            if (MARKER_WORD_RE.test(cl) || /^(resumen|adjuntar|para\s)/i.test(cl)) break;
+                            extra.push(raw.replace(/\*\*/g, ""));
+                            j++;
+                        }
+                        if (extra.length) { txt = (txt + " " + extra.join(" ")).trim(); i = j - 1; }
+                    }
+                    if (txt.length > 1500) txt = txt.slice(0, 1500) + "… (recortado a 1500 caracteres; ver texto completo en la transcripción)";
+                    if (!txt) { notes.push("⚠️ " + who + " escribió PROPONGO sin texto de propuesta. No se registró."); continue; }
+                    const paren = m[1] || "";
+                    const replId = /(reemplaz|refin|sustitu|mejora|corrige)/i.test(paren) ? (paren.match(/D\d+/i) || [null])[0] : null;
                     const dup = state.decisions.find(d => d.proposer === who && d.text.toLowerCase() === txt.toLowerCase());
-                    if (dup) return;
+                    if (dup) continue;
                     const d = {
                         id: "D" + (state.decisions.length + 1), text: txt, proposer: who, cycle: state.cycle, time: now(),
                         status: 'PROPUESTA', stances: {}, history: [], replaces: null, pendingReplacement: null, replacedBy: null,
@@ -438,31 +500,59 @@
                     };
                     state.decisions.push(d);
                     setStance(d, who, 'APOYO', "(propone)");
-                    notes.push("⚖️ Nueva propuesta " + d.id + " de " + who + ": " + txt);
-                    if (m[1]) {
-                        const old = findDecision(m[1]);
-                        if (old && old.status !== 'REEMPLAZADA' && old.id !== d.id) { d.replaces = old.id; old.pendingReplacement = d.id; notes.push("🔁 " + d.id + " propone reemplazar a " + old.id + " (pendiente de confirmación del moderador)."); }
-                        else notes.push("⚠️ " + who + " quiso reemplazar " + m[1] + ", que no existe o ya fue reemplazada.");
+                    notes.push("⚖️ Nueva propuesta " + d.id + " de " + who + ": " + (txt.length > 200 ? txt.slice(0, 200) + "…" : txt));
+                    if (replId) {
+                        const old = findDecision(replId);
+                        if (old && OPEN_STATES.includes(old.status) && old.id !== d.id) { d.replaces = old.id; old.pendingReplacement = d.id; notes.push("🔁 " + d.id + " propone reemplazar a " + old.id + " (pendiente de confirmación del moderador)."); }
+                        else notes.push("⚠️ " + who + " quiso reemplazar " + replId + ", que no existe o ya está cerrada. " + d.id + " quedó como propuesta independiente.");
                     }
-                } else if ((m = l.match(/^APOYO\s*:\s*(.+)$/i))) {
-                    (m[1].match(/D\d+/gi) || []).forEach(id => {
+                } else if ((m = l.match(/^(?:APOYO|APOYA)\s*:\s*(.*)$/i))) {
+                    const { ids } = leadingIds(m[1]);
+                    if (!ids.length) { notes.push("⚠️ No pude interpretar el apoyo de " + who + ": \"" + l.slice(0, 120) + "\" (formato: APOYO: D1, D3)."); continue; }
+                    ids.forEach(id => {
                         const d = findDecision(id);
                         if (!d) { notes.push("⚠️ " + who + " apoyó " + id + ", que no existe. Ignorado."); return; }
                         if (!OPEN_STATES.includes(d.status)) { notes.push("ℹ️ " + who + " apoyó " + d.id + ", que ya está " + d.status + ". No cambia su estado."); return; }
                         setStance(d, who, 'APOYO', "");
                     });
-                } else if ((m = l.match(/^OBJETO\s*:\s*(D\d+)\s*(?:[—–:\-]+\s*(.*))?$/i))) {
-                    const d = findDecision(m[1]); const reason = (m[2] || "").trim();
-                    if (!d) { notes.push("⚠️ " + who + " objetó " + m[1] + ", que no existe. Ignorado."); return; }
-                    if (!reason) { notes.push("⚠️ " + who + " objetó " + d.id + " sin motivo: la objeción NO se registró (formato: OBJETO: " + d.id + " — motivo)."); return; }
-                    if (!OPEN_STATES.includes(d.status)) {
-                        d.history.push({ who: who, type: 'OBJETO', reason: reason, cycle: state.cycle, time: now(), late: true });
-                        notes.push("ℹ️ " + who + " objetó " + d.id + ", que ya está " + d.status + ": queda en el historial, no cambia su estado."); return;
-                    }
-                    setStance(d, who, 'OBJETO', reason);
+                } else if ((m = l.match(/^(?:OBJETO|OBJECI[OÓ]N)\s*:\s*(.*)$/i))) {
+                    const { ids, rest } = leadingIds(m[1]);
+                    if (!ids.length) { notes.push("⚠️ No pude interpretar la objeción de " + who + ": \"" + l.slice(0, 120) + "\" (formato: OBJETO: D2 — motivo)."); continue; }
+                    ids.forEach(id => {
+                        const d = findDecision(id);
+                        if (!d) { notes.push("⚠️ " + who + " objetó " + id + ", que no existe. Ignorado."); return; }
+                        if (!rest) { notes.push("⚠️ " + who + " objetó " + d.id + " sin motivo: la objeción NO se registró (formato: OBJETO: " + d.id + " — motivo)."); return; }
+                        if (d.proposer === who) { retireDecision(d, who, rest, notes, "(interpretado como RETIRO: es su propia propuesta)"); return; }
+                        if (!OPEN_STATES.includes(d.status)) {
+                            d.history.push({ who: who, type: 'OBJETO', reason: rest, cycle: state.cycle, time: now(), late: true });
+                            notes.push("ℹ️ " + who + " objetó " + d.id + ", que ya está " + d.status + ": queda en el historial, no cambia su estado."); return;
+                        }
+                        setStance(d, who, 'OBJETO', rest);
+                    });
+                } else if ((m = l.match(/^(?:RETIRO|RETIRA)\s*:\s*(.*)$/i))) {
+                    const { ids, rest } = leadingIds(m[1]);
+                    if (!ids.length) { notes.push("⚠️ No pude interpretar el retiro de " + who + ": \"" + l.slice(0, 120) + "\" (formato: RETIRO: D3 — motivo)."); continue; }
+                    ids.forEach(id => {
+                        const d = findDecision(id);
+                        if (!d) { notes.push("⚠️ " + who + " quiso retirar " + id + ", que no existe."); return; }
+                        if (d.proposer !== who) { notes.push("⚠️ " + who + " quiso retirar " + d.id + ", pero solo puede retirarla quien la propuso (" + d.proposer + "). Si no está de acuerdo, que use OBJETO."); return; }
+                        retireDecision(d, who, rest, notes, "");
+                    });
+                } else {
+                    notes.push("⚠️ Línea de " + who + " que parece una marca del registro pero no pude interpretar: \"" + l.slice(0, 140) + "\". Formatos válidos: PROPONGO: … · APOYO: D1, D3 · OBJETO: D2 — motivo · RETIRO: D4 — motivo.");
                 }
-            });
+            }
             notes.forEach(sysMsg);
+        }
+
+        function retireDecision(d, who, reason, notes, suffix) {
+            if (!OPEN_STATES.includes(d.status)) { notes.push("ℹ️ " + who + " quiso retirar " + d.id + ", que ya está " + d.status + "."); return; }
+            d.status = 'RETIRADA';
+            d.resolution = { by: who + " (proponente)", cycle: state.cycle, time: now(), note: reason || "", objectors: [], silent: [] };
+            d.history.push({ who: who, type: 'RETIRO', reason: reason || "", cycle: state.cycle, time: now() });
+            if (d.replaces) { const old = findDecision(d.replaces); if (old && old.pendingReplacement === d.id) old.pendingReplacement = null; }
+            if (d.pendingReplacement) { const nd = findDecision(d.pendingReplacement); if (nd) nd.replaces = null; d.pendingReplacement = null; }
+            notes.push("↩️ " + who + " retiró su propuesta " + d.id + (reason ? " — " + reason : "") + (suffix ? " " + suffix : "") + ".");
         }
 
         function silentFor(d) {
@@ -478,8 +568,27 @@
             if (sil.length) parts.push("sin pronunciarse: " + sil.join(", "));
             return parts.join(" · ");
         }
-        function ledgerLine(d) {
-            let l = d.id + " · " + d.status + " · \"" + d.text + "\" · propone: " + d.proposer + " (Ciclo " + d.cycle + ")";
+        // Nivel de consenso entre los integrantes del consejo (el moderador no vota: decide).
+        function consensus(d) {
+            const voters = state.participants.map(p => p.name);
+            const sup = voters.filter(n => d.stances[n] && d.stances[n].type === 'APOYO');
+            const obj = voters.filter(n => d.stances[n] && d.stances[n].type === 'OBJETO');
+            const missing = voters.filter(n => !d.stances[n]);
+            const N = voters.length;
+            let level = 'debate';
+            if (!OPEN_STATES.includes(d.status)) level = 'cerrada';
+            else if (obj.length) level = 'disputada';
+            else if (N > 0 && sup.length === N) level = 'unanime';
+            else if (N >= 3 && sup.length === N - 1) level = 'casi';
+            return { level: level, sup: sup, obj: obj, missing: missing, N: N };
+        }
+
+        function ledgerLine(d, compact, hideId) {
+            const idTxt = hideId ? "(tu propuesta)" : d.id;
+            if (compact && ['REEMPLAZADA', 'RECHAZADA', 'RETIRADA'].includes(d.status)) {
+                return idTxt + " · " + d.status + (d.replacedBy ? " por " + d.replacedBy : "") + " · \"" + (d.text.length > 70 ? d.text.slice(0, 70) + "…" : d.text) + "\"";
+            }
+            let l = idTxt + " · " + d.status + " · \"" + d.text + "\" · propone: " + d.proposer + " (Ciclo " + d.cycle + ")";
             if (d.replaces) l += " · reemplaza a " + d.replaces;
             if (d.pendingReplacement) l += " · reemplazo propuesto por " + d.pendingReplacement + " (pendiente)";
             if (d.replacedBy) l += " · reemplazada por " + d.replacedBy;
@@ -489,11 +598,13 @@
                 if (d.resolution.objectors && d.resolution.objectors.length) l += " · CON OBJECIÓN VIGENTE de " + d.resolution.objectors.join("; ");
                 if (d.resolution.silent && d.resolution.silent.length) l += " · sin pronunciarse al resolver: " + d.resolution.silent.join(", ");
             } else {
+                const c = consensus(d);
+                l += " · apoyo " + c.sup.length + "/" + c.N;
                 const ss = stanceSummary(d); if (ss) l += " · " + ss;
             }
             return l;
         }
-        function ledgerText() { return state.decisions.map(ledgerLine).join("\n"); }
+        function ledgerText(compact) { return state.decisions.map(d => ledgerLine(d, compact)).join("\n"); }
 
         function resolveDecision(id, status) {
             const d = findDecision(id); if (!d) return;
@@ -509,6 +620,7 @@
                 }
                 d.status = 'ACORDADA';
                 d.resolution = { by: state.userName, cycle: state.cycle, time: now(), note: "", objectors: objectors, silent: silent };
+                if (d.pendingReplacement) { const nd = findDecision(d.pendingReplacement); if (nd) nd.replaces = null; sysMsg("ℹ️ " + d.pendingReplacement + " proponía reemplazar a " + d.id + ", pero " + d.id + " quedó ACORDADA: " + d.pendingReplacement + " sigue como propuesta independiente."); d.pendingReplacement = null; }
                 sysMsg("✔️ " + state.userName + " marcó " + d.id + " como ACORDADA" + (objectors.length ? " (con objeción vigente de " + objectors.join("; ") + ")" : "") + (silent.length ? " · sin pronunciarse: " + silent.join(", ") : "") + ".");
             } else if (status === 'RECHAZADA') {
                 const note = prompt("Motivo del rechazo de " + d.id + " (opcional):", "");
@@ -539,22 +651,33 @@
             old.pendingReplacement = null; saveState(); renderAll();
         }
 
+        const LEVEL_ORDER = { unanime: 0, casi: 1, disputada: 2, debate: 3, cerrada: 4 };
         function renderLedger() {
             const el = document.getElementById('ledger-list');
+            renderGovernanceBanner();
             if (!state.decisions.length) { el.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">Sin propuestas todavía.</span>'; return; }
             el.innerHTML = "";
-            state.decisions.slice().reverse().forEach(d => {
-                const div = document.createElement('div'); div.className = 'ledger-item';
-                let html = '<span class="lid">' + esc(d.id) + '</span><span class="lstatus st-' + esc(d.status) + '">' + esc(d.status) + '</span>' +
+            const items = state.decisions.map(d => ({ d: d, c: consensus(d) }))
+                .sort((a, b) => (LEVEL_ORDER[a.c.level] - LEVEL_ORDER[b.c.level]) || (parseInt(b.d.id.slice(1)) - parseInt(a.d.id.slice(1))));
+            items.forEach(({ d, c }) => {
+                const div = document.createElement('div'); div.className = 'ledger-item lv-' + c.level;
+                let badge = "";
+                if (c.level === 'unanime') badge = '<span class="cbadge cb-unanime">✓ ' + c.sup.length + '/' + c.N + ' UNÁNIME</span>';
+                else if (c.level === 'casi') badge = '<span class="cbadge cb-casi">' + c.sup.length + '/' + c.N + ' casi unánime</span>';
+                else if (c.level === 'disputada') badge = '<span class="cbadge cb-disputada">' + c.sup.length + '/' + c.N + ' · ' + c.obj.length + ' objeción(es)</span>';
+                else if (c.level === 'debate') badge = '<span class="cbadge cb-debate">' + c.sup.length + '/' + c.N + ' apoyos</span>';
+                let html = '<span class="lid">' + esc(d.id) + '</span><span class="lstatus st-' + esc(d.status) + '">' + esc(d.status) + '</span>' + badge +
                     '<div class="ltext">' + esc(d.text) + '</div><div class="lmeta">propone: ' + esc(d.proposer) + ' (C' + d.cycle + ')';
                 if (d.replaces) html += ' · reemplaza a ' + esc(d.replaces);
                 if (d.replacedBy) html += ' · reemplazada por ' + esc(d.replacedBy);
                 html += '</div>';
+                if (c.level === 'unanime') html += '<div class="lmeta" style="color: var(--success); font-weight: bold;">Todo el consejo la apoya: lista para que decidas.</div>';
+                if (c.level === 'casi') html += '<div class="lmeta" style="color: #5eead4;">Falta pronunciarse: ' + esc(c.missing.join(", ")) + ' · sin objeciones.</div>';
                 if (d.resolution) {
                     html += '<div class="lmeta">' + esc(d.status) + ' por ' + esc(d.resolution.by) + ' (C' + d.resolution.cycle + ')' + (d.resolution.note ? ' — ' + esc(d.resolution.note) : '') + '</div>';
                     if (d.resolution.objectors && d.resolution.objectors.length) html += '<div class="lmeta" style="color: var(--warning);">con objeción vigente: ' + esc(d.resolution.objectors.join("; ")) + '</div>';
                     if (d.resolution.silent && d.resolution.silent.length) html += '<div class="lmeta">sin pronunciarse: ' + esc(d.resolution.silent.join(", ")) + '</div>';
-                } else {
+                } else if (c.level !== 'unanime') {
                     html += '<div class="lmeta">' + esc(stanceSummary(d)) + '</div>';
                 }
                 const btns = [];
@@ -570,8 +693,82 @@
                 if (btns.length) html += '<div class="btn-group" style="margin-top: 0.3rem;">' + btns.join("") + '</div>';
                 div.innerHTML = html; el.appendChild(div);
             });
+            const counts = { unanime: 0, casi: 0, disputada: 0, debate: 0, cerrada: 0 };
+            items.forEach(x => counts[x.c.level]++);
+            const pendRepl = state.decisions.filter(d => d.pendingReplacement).length;
+            const stats = document.createElement('div'); stats.className = 'ledger-stats';
+            stats.innerHTML = '<span style="color: var(--success);">✓ Unánimes sin resolver: <b>' + counts.unanime + '</b></span>' +
+                '<span style="color: #5eead4;">Casi unánimes: <b>' + counts.casi + '</b></span>' +
+                '<span style="color: var(--warning);">Disputadas: <b>' + counts.disputada + '</b></span>' +
+                '<span>En debate: <b>' + counts.debate + '</b></span>' +
+                '<span style="color: var(--text-muted);">Cerradas: <b>' + counts.cerrada + '</b></span>' +
+                (pendRepl ? '<span style="color: var(--primary);">Reemplazos pendientes: <b>' + pendRepl + '</b></span>' : '');
+            el.appendChild(stats);
         }
 
+        function govPending() {
+            const unanimes = state.decisions.filter(d => consensus(d).level === 'unanime');
+            const repl = state.decisions.filter(d => d.pendingReplacement && OPEN_STATES.includes(d.status));
+            return { unanimes: unanimes, repl: repl };
+        }
+
+        function renderGovernanceBanner() {
+            const b = document.getElementById('gov-banner');
+            const g = govPending();
+            if (!g.unanimes.length && !g.repl.length) { b.classList.add('hidden'); return; }
+            const parts = [];
+            if (g.unanimes.length) parts.push("tenés " + g.unanimes.length + " propuesta(s) con APOYO UNÁNIME sin resolver (" + g.unanimes.map(d => d.id).join(", ") + ")");
+            if (g.repl.length) parts.push(g.repl.length + " reemplazo(s) esperando tu confirmación");
+            b.innerHTML = "<span>🟢 Che, " + esc(parts.join(" y ")) + ".</span><button class='success' onclick='openGovernance()'>Revisar y resolver</button>";
+            b.classList.remove('hidden');
+        }
+
+        function closeGov() { document.getElementById('gov-modal').style.display = 'none'; }
+        function showCycleModal() { advanceTurn(); saveState(); renderAll(); }
+        function openGovernance() {
+            renderGovernanceBody();
+            document.getElementById('gov-modal').style.display = 'flex';
+        }
+
+        function renderGovernanceBody() {
+            const body = document.getElementById('gov-body');
+            const g = govPending();
+            let html = "";
+            if (g.unanimes.length) {
+                html += "<h4 style='margin: 0.3rem 0; color: var(--success);'>✓ Apoyo unánime del consejo</h4>";
+                g.unanimes.forEach(d => {
+                    html += "<div class='gov-row'><span><b>" + esc(d.id) + "</b> · " + esc(d.text.length > 220 ? d.text.slice(0, 220) + "…" : d.text) + "</span><span class='btn-group' style='margin: 0; flex-wrap: nowrap;'>" +
+                        "<button class='success tiny' onclick=\"resolveDecision('" + esc(d.id) + "','ACORDADA')\">✔ Acordar</button>" +
+                        "<button class='danger tiny' onclick=\"resolveDecision('" + esc(d.id) + "','RECHAZADA')\">✖ Rechazar</button></span></div>";
+                });
+                if (g.unanimes.length > 1) html += "<button class='success' onclick='agreeAllUnanimous()'>✔ Acordar las " + g.unanimes.length + " unánimes</button>";
+            }
+            if (g.repl.length) {
+                html += "<h4 style='margin: 0.6rem 0 0.3rem; color: var(--primary);'>🔁 Reemplazos pendientes</h4>";
+                g.repl.forEach(old => {
+                    const nd = findDecision(old.pendingReplacement);
+                    html += "<div class='gov-row'><span><b>" + esc(old.id) + "</b> → <b>" + esc(old.pendingReplacement) + "</b>: " + esc(nd ? (nd.text.length > 180 ? nd.text.slice(0, 180) + "…" : nd.text) : "") + "</span><span class='btn-group' style='margin: 0; flex-wrap: nowrap;'>" +
+                        "<button class='secondary tiny' onclick=\"confirmReplacement('" + esc(old.id) + "')\">↻ Confirmar</button>" +
+                        "<button class='secondary tiny' onclick=\"rejectReplacement('" + esc(old.id) + "')\">No reemplazar</button></span></div>";
+                });
+            }
+            if (!html) html = "<p style='color: var(--text-muted);'>No queda nada pendiente de tu decisión. 👌</p>";
+            body.innerHTML = html;
+        }
+
+        function agreeAllUnanimous() {
+            const g = govPending();
+            if (!confirm("¿Acordar las " + g.unanimes.length + " propuestas unánimes (" + g.unanimes.map(d => d.id).join(", ") + ")?")) return;
+            g.unanimes.forEach(d => {
+                if (d.pendingReplacement) { const nd = findDecision(d.pendingReplacement); if (nd) nd.replaces = null; d.pendingReplacement = null; }
+                d.status = 'ACORDADA';
+                d.resolution = { by: state.userName, cycle: state.cycle, time: now(), note: "acordada en lote (apoyo unánime)", objectors: [], silent: [] };
+            });
+            sysMsg("✔️ " + state.userName + " acordó en lote las propuestas unánimes: " + g.unanimes.map(d => d.id).join(", ") + ".");
+            saveState(); renderAll();
+        }
+
+        const CONDENSE_AT = 6000, CONDENSE_TARGET = 4000;
         // ---------- CHEQUEO DEL ACUMULATIVO (determinista, sin LLM) ----------
         const PRESERVED_TAG_RE = /\[(?:TAG_AUSENCIA|DEBATE_RETOMADO)[^\]]*\]/g;
         const CHECK_STOP = new Set('porque tambien debemos debe deben entre sobre antes despues donde cuando mientras desde hasta contra ademas siempre todavia propone propuso plantea identifica confirma refuerza define detecta prioriza sugiere senala insiste coincide participante respuesta postura'.split(' '));
@@ -643,6 +840,23 @@
                     if (miss.length >= 3 && miss.length / kw.length >= 0.4)
                         issues.push("Posible atribución sin respaldo a " + who + " (Ciclo " + ctx.cycle + "): estas palabras no aparecen en lo que dijo — " + miss.join(", ") + ". Línea: \"" + clean.slice(0, 140) + "\"");
                 }
+            });
+
+            // (1c) afirmaciones sobre el registro que no coinciden con él
+            const STATE_WORDS = { reemplazad: 'REEMPLAZADA', rechazad: 'RECHAZADA', descartad: 'RECHAZADA', acordad: 'ACORDADA', aprobad: 'ACORDADA', retirad: 'RETIRADA' };
+            lines.forEach(raw => {
+                const clean = raw.replace(/[*_#>`]/g, "");
+                let m; const re = /\b(D\d+)\b[^\n.;]{0,35}?\b(reemplazad|rechazad|descartad|acordad|aprobad|retirad)[ao]s?\b/gi;
+                while ((m = re.exec(clean))) {
+                    const d = findDecision(m[1]); if (!d) continue;
+                    const claimed = STATE_WORDS[m[2].toLowerCase()];
+                    if (d.status !== claimed) issues.push("Dice que " + d.id + " está " + claimed + ", pero en el registro está " + d.status + (d.pendingReplacement ? " (reemplazo por " + d.pendingReplacement + " pendiente)" : "") + ". Solo el moderador cambia estados.");
+                }
+                const cl = raw.replace(/[*_#>`]/g, "").replace(/^\s*[-•]\s*/, "").trim();
+                const who = names.find(n => { const c = normTxt(cl), nn = normTxt(n); return c.startsWith(nn) && /^[\s:(\-–—]/.test(c.slice(nn.length)); });
+                if (!who) return;
+                const pr = /\bpropon\w*\s+(D\d+)/gi; let q;
+                while ((q = pr.exec(cl))) { const d = findDecision(q[1]); if (d && d.proposer !== who) issues.push("Atribuye a " + who + " haber propuesto " + d.id + ", pero la propuso " + d.proposer + "."); }
             });
 
             // (3) quienes hablaron en el ciclo actual y no figuran
@@ -897,6 +1111,14 @@
                     state.cumulativeSummary = (state.cumulativeSummary ? state.cumulativeSummary + "\n" : "") + auto;
                 }
                 state.currentParticipantIndex = -1;
+                const g = govPending();
+                const note = document.getElementById('cycle-gov-note');
+                if (g.unanimes.length || g.repl.length) {
+                    note.innerHTML = "<div style='background: #14532d; border: 1px solid var(--success); border-radius: 6px; padding: 0.6rem; font-size: 0.9rem;'>⚖️ Antes de seguir: " +
+                        (g.unanimes.length ? "<b>" + g.unanimes.length + "</b> propuesta(s) unánime(s) sin resolver" : "") + (g.unanimes.length && g.repl.length ? " y " : "") +
+                        (g.repl.length ? "<b>" + g.repl.length + "</b> reemplazo(s) pendiente(s)" : "") +
+                        ". <button class='success tiny' onclick='openGovernance()'>Resolver ahora</button></div>";
+                } else note.innerHTML = "";
                 document.getElementById('cycle-modal').style.display = 'flex';
                 return;
             }
@@ -933,7 +1155,8 @@
             if (!response) return alert("Pega la respuesta del LLM primero.");
             const currentP = state.participants[state.currentParticipantIndex];
             const reqNames = detectFileRequests(response);
-            if (lastUnmatchedRequests.length) sysMsg("⚠️ " + currentP.name + " pidió archivo(s) que no están cargados: " + lastUnmatchedRequests.join(", ") + ". Disponibles: " + (state.contextFiles.map(f => f.name).join(", ") || "(ninguno)") + ".");
+            if (lastUnmatchedRequests.length) lastUnmatchedRequests.forEach(n => { if (!(state.missingRequests || []).some(r => r.pid === currentP.id && r.name.toLowerCase() === n.toLowerCase())) state.missingRequests.push({ pid: currentP.id, who: currentP.name, name: n, cycle: state.cycle }); });
+            if (lastUnmatchedRequests.length) sysMsg("⚠️ " + currentP.name + " pidió archivo(s) que no están cargados: " + lastUnmatchedRequests.join(", ") + ". Disponibles: " + (state.contextFiles.map(f => f.name).join(", ") || "(ninguno)") + ". Si lo subís con \"+ Agregar\", se le adjunta solo en su próximo prompt.");
             if (reqNames.length) {
                 if (!Array.isArray(state.pendingAttachments[currentP.id])) state.pendingAttachments[currentP.id] = [];
                 const added = [], already = [];
@@ -1023,7 +1246,7 @@
                 const cum = document.getElementById('cumulative-input').value.trim() || extractCumulative(response);
                 if (cum) {
                     state.cumulativeSummary = cum; cumulativeUpdatedCycle = state.cycle;
-                    if (cum.length > 8000) state.messages.push({ sender: "Sistema", text: "⚠️ El RESUMEN_ACUMULATIVO ya tiene " + cum.length + " caracteres. No se recortó nada, pero los prompts están creciendo: considerá pedirle al resumidor que lo condense.", type: "system", timestamp: now(), cycle: state.cycle });
+                    if (cum.length > CONDENSE_AT) state.messages.push({ sender: "Sistema", text: "ℹ️ El RESUMEN_ACUMULATIVO tiene " + cum.length + " caracteres. No se recortó nada; en el próximo cierre el prompt del resumidor le va a pedir condensarlo (objetivo: ≤ " + CONDENSE_TARGET + ").", type: "system", timestamp: now(), cycle: state.cycle });
                 }
                 document.getElementById('cumulative-input').value = "";
                 cumulativeManuallyEdited = false;
@@ -1197,9 +1420,10 @@
                 .map(m => "- " + m.sender + ": " + (m.summary || m.text)).join("\n");
         }
 
+        function refreshGovModalIfOpen() { if (document.getElementById('gov-modal').style.display === 'flex') renderGovernanceBody(); }
         function renderAll() {
             document.querySelectorAll('.uname').forEach(el => { el.textContent = state.userName; });
-            renderParticipants(); renderFiles(); renderChat(); renderControls(); renderCumulativeSummary(); renderLedger();
+            renderParticipants(); renderFiles(); renderChat(); renderControls(); renderCumulativeSummary(); renderLedger(); refreshGovModalIfOpen();
         }
 
         function renderParticipants() {
@@ -1216,16 +1440,58 @@
         }
 
         function renderFiles() {
-            const sec = document.getElementById('files-section');
             const list = document.getElementById('files-list');
-            if (!state.contextFiles.length) { sec.classList.add('hidden'); return; }
-            sec.classList.remove('hidden');
             list.innerHTML = "";
+            if (!state.contextFiles.length) { list.innerHTML = "<span style='font-size: 0.8rem; color: var(--text-muted);'>Sin archivos. Podés subir con + Agregar.</span>"; }
             state.contextFiles.forEach(f => {
                 const row = document.createElement('div');
                 row.className = 'init-row';
-                row.innerHTML = "<span>📄 " + esc(f.name) + (f.isDebateExport ? " 🔄" : "") + "</span><button class='secondary tiny' onclick=\"viewFile('" + f.id + "')\">ver</button>";
+                row.innerHTML = "<span>📄 " + esc(f.name) + (f.isDebateExport ? " 🔄" : "") + (f.addedCycle ? " <small style='color: var(--text-muted);'>(C" + f.addedCycle + ")</small>" : "") + "</span><button class='secondary tiny' onclick=\"viewFile('" + f.id + "')\">ver</button>";
                 list.appendChild(row);
+            });
+            const miss = (state.missingRequests || []);
+            if (miss.length) {
+                const w = document.createElement('div');
+                w.style.cssText = "font-size: 0.78rem; color: var(--warning); margin-top: 0.3rem;";
+                w.textContent = "⚠️ Pedidos sin archivo: " + miss.map(r => r.name + " (" + r.who + ")").join(", ") + ". Subilos con + Agregar y se adjuntan solos en su próximo prompt.";
+                list.appendChild(w);
+            }
+        }
+
+        function handleMidDebateFiles(evt) {
+            const files = Array.from(evt.target.files || []);
+            evt.target.value = "";
+            files.forEach(file => {
+                if (file.size > 300000) { alert("⚠️ \"" + file.name + "\" supera los 300 KB y se omitió (cuota de localStorage)."); return; }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const content = String(reader.result || "");
+                    const existing = state.contextFiles.find(f => f.name.toLowerCase() === file.name.toLowerCase());
+                    if (existing) {
+                        if (!confirm("Ya hay un archivo \"" + existing.name + "\". ¿Reemplazarlo por la versión nueva? Se volverá a enviar a quien lo pida.")) return;
+                        existing.content = content; existing.addedCycle = state.cycle;
+                        Object.keys(state.deliveredFiles).forEach(pid => { state.deliveredFiles[pid] = (state.deliveredFiles[pid] || []).filter(x => x !== existing.id); });
+                        sysMsg("📎 " + state.userName + " actualizó el archivo de contexto \"" + existing.name + "\" (Ciclo " + state.cycle + ").");
+                    } else {
+                        state.contextFiles.push({ id: "f" + Date.now() + "_" + Math.floor(Math.random() * 10000), name: file.name, content: content, isDebateExport: false, parsed: null, addedCycle: state.cycle });
+                        sysMsg("📎 " + state.userName + " agregó el archivo de contexto \"" + file.name + "\" durante el debate (Ciclo " + state.cycle + ").");
+                    }
+                    // Pedidos pendientes de ese archivo: se adjuntan solos en el próximo prompt de quien lo pidió
+                    const f = matchContextFile(file.name);
+                    const served = [];
+                    state.missingRequests = (state.missingRequests || []).filter(r => {
+                        const hit = matchContextFile(r.name);
+                        if (!hit || hit.id !== f.id) return true;
+                        if (!Array.isArray(state.pendingAttachments[r.pid])) state.pendingAttachments[r.pid] = [];
+                        if (!state.pendingAttachments[r.pid].includes(f.id)) state.pendingAttachments[r.pid].push(f.id);
+                        served.push(r.who);
+                        return false;
+                    });
+                    if (served.length) sysMsg("📎 \"" + f.name + "\" se adjuntará en el próximo prompt de: " + [...new Set(served)].join(", ") + ".");
+                    saveState(); renderAll();
+                    toast("📎 " + file.name + " agregado");
+                };
+                reader.readAsText(file);
             });
         }
 
@@ -1246,7 +1512,10 @@
             const ti = document.getElementById('turn-info');
             const pd = document.getElementById('prompt-display');
             if (state.finalized) { ti.textContent = "🏁 Debate finalizado."; pd.textContent = ""; return; }
-            if (state.currentParticipantIndex === -1) { ti.textContent = "⏸️ Ciclo completado. Esperando tu decisión."; pd.textContent = ""; return; }
+            if (state.currentParticipantIndex === -1) {
+                ti.innerHTML = "⏸️ Ciclo completado. Esperando tu decisión. <button class='tiny' onclick='showCycleModal()'>▶ Abrir cierre de ciclo</button>";
+                pd.textContent = ""; document.getElementById('parts-nav').classList.add('hidden'); currentParts = []; lastPromptKey = ""; return;
+            }
 
             const p = state.participants[state.currentParticipantIndex];
             const preview = rotationPreview();
@@ -1283,44 +1552,100 @@
 
             if (state.decisions.length) {
                 if (isBlindFor(p)) {
-                    const own = state.decisions.filter(d => d.cycle !== 1 || d.proposer === p.name || d.proposer === state.userName);
-                    if (own.length) prompt += "\n## REGISTRO DE DECISIONES (lo mantiene la interfaz; en el Ciclo 1 a ciegas solo ves las tuyas y las del moderador):\n" + own.map(ledgerLine).join("\n") + "\n";
+                    // Sin números: el número de propuesta revelaría cuántas hicieron los demás en la vuelta ciega
+                    const own = state.decisions.filter(d => d.proposer === p.name);
+                    if (own.length) prompt += "\n## TUS PROPUESTAS REGISTRADAS (Ciclo 1 a ciegas: los números y las del resto se ven en el Ciclo 2):\n" + own.map(d => "- \"" + d.text + "\" · " + d.status).join("\n") + "\n";
                 } else {
-                    prompt += "\n## REGISTRO DE DECISIONES (lo mantiene la interfaz; solo el moderador marca ACORDADA/RECHAZADA/REEMPLAZADA):\n" + ledgerText() + "\n";
+                    prompt += "\n## REGISTRO DE DECISIONES (lo mantiene la interfaz; solo el moderador marca ACORDADA/RECHAZADA/REEMPLAZADA; quien propuso puede retirarla):\n" + ledgerText(true) + "\n";
                 }
             }
-            prompt += "\n## CÓMO PROPONER Y POSICIONARTE (líneas propias, antes del RESUMEN):\n- \"PROPONGO: <decisión concreta>\" (o \"PROPONGO (reemplaza D2): ...\" para mejorar una existente).\n- \"APOYO: D1, D3\"\n- \"OBJETO: D2 — <motivo>\" (sin motivo no se registra).\nNo declares decisiones como tomadas: solo el moderador acuerda.\n";
+            const howto = "\n## CÓMO PROPONER Y POSICIONARTE (líneas propias, antes del RESUMEN):\n- \"PROPONGO: <decisión concreta>\" (o \"PROPONGO (reemplaza D2): ...\" para mejorar una existente).\n- \"APOYO: D1, D3\"\n- \"OBJETO: D2 — <motivo>\" (sin motivo no se registra; podés objetar varias: \"OBJETO: D4, D5 — motivo\").\n- \"RETIRO: D6 — <motivo>\" (solo para retirar una propuesta tuya).\nNo declares decisiones como tomadas: solo el moderador acuerda.\n";
 
             const absentees = state.participants.filter(x => !x.active);
             if (absentees.length > 0) {
                 prompt += "\n⚠️ AUSENTES: " + absentees.map(a => a.name + " (desde " + a.leftAtTime + ")").join(', ') + ".\nSi mencionás algo crítico para alguno, agregá una línea \"PARA [Nombre]: ...\" (máx 1 línea c/u).\n";
             }
 
-            const attIds = (state.turnAttachments[p.id] && state.turnAttachments[p.id].length) ? state.turnAttachments[p.id] : (state.pendingAttachments[p.id] || []);
+            const sameTurnRegen = !!(state.turnAttachments[p.id] && state.turnAttachments[p.id].length);
+            const attIds = sameTurnRegen ? state.turnAttachments[p.id] : (state.pendingAttachments[p.id] || []);
             const atts = attIds.map(fid => state.contextFiles.find(f => f.id === fid)).filter(Boolean);
+            let filesBlock = "";
             if (atts.length) {
-                prompt += "\n## ARCHIVOS ADJUNTOS SOLICITADOS POR VOS:\n";
-                atts.forEach(f => { prompt += "\n### " + f.name + " (contenido como .txt)\n" + f.content + "\n"; });
+                filesBlock += "\n## ARCHIVOS ADJUNTOS SOLICITADOS POR VOS:\n";
+                atts.forEach(f => { filesBlock += "\n### " + f.name + " (contenido como .txt)\n" + f.content + "\n"; });
             }
+            if (sameTurnRegen) {
+                // Misma vuelta: el LLM ya tiene el contexto completo en su chat. Solo viajan los archivos + las instrucciones de cierre.
+                prompt = "## CONTINUACIÓN DE TU TURNO (" + p.name + ")\nEn tu mensaje anterior de este mismo chat ya recibiste el contexto completo del debate (tema, resumen, síntesis y registro). Acá van SOLO los archivos que pediste; con ellos, respondé tu turno completo.\n" + filesBlock;
+            } else {
+                prompt += filesBlock;
+            }
+            prompt += howto;
 
             if (isSummarizerTurn()) {
-                prompt += "\n## TU ROL ESPECIAL (" + p.name + ", cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que sea exhaustiva y permita RETOMAR el debate en el futuro sin perder nada. Debe incluir:\n   - Ciclos anteriores y actual, con la posición de cada participante (incluidos reincorporados y respuestas intermedias).\n   - Estado de las propuestas refiriéndote a ellas por número (D1, D2...). NO escribas \"Decisiones tomadas\": el REGISTRO DE DECISIONES lo mantiene la interfaz y solo el moderador acuerda.\n   - Pendientes.\n   - Ideas DESCARTADAS o rechazadas (con el motivo).\n   - Contradicciones abiertas o cambios de postura.\n   - TAGs de ausencia.\nLa interfaz la capturará automáticamente.\n";
+                prompt += "\n## TU ROL ESPECIAL (" + p.name + ", cierra el ciclo):\n1) Da tu opinión técnica.\n2) Generá una sección titulada \"RESUMEN_ACUMULATIVO actualizado:\" que sea exhaustiva y permita RETOMAR el debate en el futuro sin perder nada. Debe incluir:\n   - Ciclos anteriores y actual, con la posición de cada participante (incluidos reincorporados y respuestas intermedias).\n   - NO copies el estado de las propuestas ni escribas \"Decisiones tomadas\": el REGISTRO DE DECISIONES lo mantiene la interfaz, viaja en cada prompt y solo el moderador acuerda. Mencioná propuestas (D#) solo dentro de contradicciones o pendientes.\n   - Pendientes.\n   - Ideas DESCARTADAS o rechazadas (con el motivo).\n   - Contradicciones abiertas o cambios de postura.\n   - TAGs de ausencia.\nLa interfaz la capturará automáticamente.\n" + condenseInstruction();
             } else {
                 prompt += "\nTu turno, " + p.name + ". Respondé al último punto con tu opinión técnica.\n";
             }
             prompt += "\n## INSTRUCCIÓN OBLIGATORIA: Terminá tu respuesta con una línea que empiece con \"RESUMEN:\" seguida de máx 2 líneas sintetizando tu postura.";
             if (state.pendingCorrection && state.pendingCorrection.pid === p.id) {
-                pd.textContent = state.pendingCorrection.prompt;
                 ti.textContent = "✏️ Corrección pendiente: " + p.name + " tiene que corregir su RESUMEN_ACUMULATIVO (prompt de corrección abajo).";
+                showPromptParts(state.pendingCorrection.prompt);
                 return;
             }
-            pd.textContent = prompt;
+            if (sameTurnRegen) ti.textContent += " · 📎 prompt reducido: solo los archivos pedidos";
+            showPromptParts(prompt);
+            const n = currentParts.length;
+            if (n > 1) ti.textContent += " · ✂️ dividido en " + n + " partes";
+        }
+
+        function condenseInstruction() {
+            const L = (state.cumulativeSummary || "").length;
+            if (L <= CONDENSE_AT) return "";
+            return "\n⚠️ CONDENSAR: el acumulativo actual tiene " + L + " caracteres y los prompts están creciendo. Reescribilo en MENOS de " + CONDENSE_TARGET + " caracteres sin perder datos relevantes: ciclos anteriores al actual en 1 línea por participante (postura final y cambios de postura), el ciclo actual completo, y conservá siempre contradicciones abiertas, pendientes, ideas descartadas con su motivo y los TAGs literales. No repitas el registro de decisiones.\n";
         }
 
         function renderCumulativeSummary() {
             const el = document.getElementById('cumulative-summary-preview');
             el.textContent = state.cumulativeSummary ? state.cumulativeSummary : "Aún no se generó resumen.";
         }
+
+        // ---------- PROMPTS LARGOS: división en partes ----------
+        var currentParts = [], currentPartIdx = 0, lastPromptKey = "";
+        function splitPrompt(text, max) {
+            if (text.length <= max) return [text];
+            const budget = max - 400; // lugar para el encabezado de cada parte
+            const chunks = []; let cur = "";
+            text.split("\n").forEach(line => {
+                while (line.length > budget) { if (cur) { chunks.push(cur); cur = ""; } chunks.push(line.slice(0, budget)); line = line.slice(budget); }
+                if ((cur + line + "\n").length > budget) { chunks.push(cur); cur = ""; }
+                cur += line + "\n";
+            });
+            if (cur.trim()) chunks.push(cur);
+            const N = chunks.length;
+            return chunks.map((c, i) => i < N - 1
+                ? "[PARTE " + (i + 1) + "/" + N + "] Este mensaje es una parte de un prompt dividido por su tamaño. NO respondas todavía ni analices: contestá únicamente \"OK " + (i + 1) + "/" + N + "\" y esperá la parte siguiente.\n---\n" + c
+                : "[PARTE " + N + "/" + N + " — ÚLTIMA] Con esta parte ya tenés el prompt completo (partes 1 a " + N + "). Ahora sí: respondé a TODO el contenido, siguiendo las instrucciones del final.\n---\n" + c);
+        }
+        function showPromptParts(fullText) {
+            const max = Math.max(2000, parseInt(state.maxPartChars, 10) || 12000);
+            const key = fullText.length + ":" + max + ":" + fullText.slice(0, 200) + fullText.slice(-200);
+            if (key !== lastPromptKey) { currentParts = splitPrompt(fullText, max); currentPartIdx = 0; lastPromptKey = key; }
+            renderParts();
+        }
+        function renderParts() {
+            const pd = document.getElementById('prompt-display');
+            const nav = document.getElementById('parts-nav');
+            pd.textContent = currentParts[currentPartIdx] || "";
+            const inp = document.getElementById('max-part-input'); if (inp && document.activeElement !== inp) inp.value = state.maxPartChars;
+            if (currentParts.length <= 1) { nav.classList.add('hidden'); return; }
+            nav.classList.remove('hidden');
+            nav.innerHTML = "✂️ Prompt largo dividido en <b>" + currentParts.length + "</b> partes. Mostrando <b>" + (currentPartIdx + 1) + "/" + currentParts.length + "</b>" +
+                " <button class='secondary tiny' onclick='movePart(-1)'>◀</button><button class='secondary tiny' onclick='movePart(1)'>▶</button>" +
+                " <small style='color: var(--text-muted);'>Copiá y pegá cada parte en orden; el LLM responde \"OK i/N\" hasta la última. Pegá acá solo la respuesta a la última.</small>";
+        }
+        function movePart(d) { currentPartIdx = Math.min(currentParts.length - 1, Math.max(0, currentPartIdx + d)); renderParts(); }
+        function setMaxPart(v) { const n = parseInt(v, 10); if (!n || n < 2000) return toast("Mínimo 2000 caracteres"); state.maxPartChars = n; saveState(); lastPromptKey = ""; renderControls(); toast("Máximo por mensaje: " + n); }
 
         let toastTimer = null;
         function toast(msg) {
@@ -1330,14 +1655,21 @@
         function copyPrompt() {
             const txt = document.getElementById('prompt-display').textContent;
             if (!txt.trim()) return toast("No hay prompt para copiar.");
-            navigator.clipboard.writeText(txt).then(() => toast("📋 Prompt copiado")).catch(() => toast("No se pudo copiar: seleccionalo a mano."));
-            document.getElementById('response-input').focus();
+            const N = currentParts.length, i = currentPartIdx;
+            const label = N > 1 ? "📋 Parte " + (i + 1) + "/" + N + " copiada" + (i < N - 1 ? " — la próxima copia trae la " + (i + 2) : " (última)") : "📋 Prompt copiado";
+            navigator.clipboard.writeText(txt).then(() => toast(label)).catch(() => toast("No se pudo copiar: seleccionalo a mano."));
+            if (N > 1 && i < N - 1) { currentPartIdx++; setTimeout(renderParts, 50); }
+            else document.getElementById('response-input').focus();
         }
 
         // Atajos: Alt+C copia el prompt · Ctrl/Cmd+Enter guarda la respuesta · Esc cierra ventanas
         document.addEventListener('keydown', (e) => {
             const appVisible = !document.getElementById('main-app').classList.contains('hidden');
-            if (e.key === 'Escape') { closeModals(); return; }
+            if (e.key === 'Escape') {
+                if (document.getElementById('gov-modal').style.display === 'flex') { closeGov(); return; }
+                if (document.getElementById('cycle-modal').style.display === 'flex') return; // el cierre de ciclo solo se sale eligiendo una opción
+                closeModals(); return;
+            }
             if (!appVisible) return;
             const modalOpen = [...document.querySelectorAll('.modal-overlay')].some(m => m.style.display === 'flex');
             if (e.altKey && !e.ctrlKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); if (!modalOpen) copyPrompt(); return; }
@@ -1349,7 +1681,7 @@
         function copyReintegrationSummary() { navigator.clipboard.writeText(document.getElementById('reintegration-summary').value).then(() => toast("📋 Resumen copiado")).catch(() => toast("No se pudo copiar: seleccionalo a mano.")); }
         function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none'); }
 
-        console.log("✅ AI Council v0.12 cargado correctamente.");
+        console.log("✅ AI Council v0.13 cargado correctamente.");
     </script>
 </body>
 </html>

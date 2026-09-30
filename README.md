@@ -64,6 +64,19 @@ viaja en cada prompt, en los snapshots de reincorporación, en el prompt de cier
   cuenta como apoyo.
 - **Posicionarse:** `APOYO: D1, D3` · `OBJETO: D2 — <motivo>`. **Sin motivo, la objeción no se
   registra** (queda un aviso). Vale la última postura de cada uno; el historial se conserva.
+- **Retirar:** `RETIRO: D6 — <motivo>`, solo quien la propuso (estado `RETIRADA`). Si alguien
+  objeta su propia propuesta, se interpreta como retiro.
+- **Parser tolerante y sin silencios:** acepta varios IDs (`OBJETO: D4/D5/D6 — …`, `APOYO: D2, D3`),
+  aclaraciones entre paréntesis (`OBJETO: D6 (mi postura anterior) — …`), `(refina Dn)` como
+  reemplazo y propuestas de varias líneas o con listas. Toda línea que parezca una marca y no se
+  pueda interpretar genera un aviso visible: nada se descarta en silencio.
+- **Consenso visual:** cada tarjeta muestra `apoyos/integrantes` con color — verde **UNÁNIME**,
+  turquesa **casi unánime** (falta uno, sin objeciones), naranja **disputada**. Las tarjetas se
+  ordenan por prioridad y abajo hay un contador (unánimes sin resolver, casi, disputadas, en
+  debate, cerradas, reemplazos pendientes).
+- **Aviso al moderador:** un cartel verde arriba del chat avisa cuando hay propuestas unánimes o
+  reemplazos esperando decisión; el cierre de ciclo lo repite. "Revisar y resolver" abre un panel
+  para acordar/rechazar (o acordar todas las unánimes de una vez) y confirmar reemplazos.
 - **Estados:**
 
   | Estado | Quién lo pone |
@@ -92,6 +105,15 @@ viaja en cada prompt, en los snapshots de reincorporación, en el prompt de cier
 - Las reincorporaciones durante el Ciclo 1 respetan la ceguera (snapshot y novedades).
 - Se desactiva con el checkbox del setup; el export `.md` indica si estuvo activa.
 
+### Prompts largos
+- **Regeneración reducida:** cuando un LLM pide archivos y el prompt se regenera en la misma
+  vuelta, el segundo prompt lleva **solo los archivos + las instrucciones de cierre** (el contexto
+  ya está en ese chat).
+- **División en partes:** si un prompt supera el máximo configurable (default 12.000 caracteres),
+  se divide en partes `[PARTE i/N]`: las intermedias le piden al LLM responder solo "OK i/N" y la
+  última dice que ya tiene todo y que responda. `Alt+C` copia la parte actual y avanza a la siguiente.
+- El registro viaja **compacto**: las propuestas reemplazadas, rechazadas o retiradas van en una línea.
+
 ### Cadena de síntesis (control de crecimiento del prompt)
 - Todo LLM debe cerrar su respuesta con `RESUMEN:` (máx 2 líneas).
 - La interfaz auto-extrae esa síntesis (marcadores `RESUMEN:` / `SÍNTESIS:` / `TL;DR`,
@@ -119,6 +141,13 @@ Antes de guardar el `RESUMEN_ACUMULATIVO`, la interfaz lo contrasta con la trans
 4. **Omisiones:** quien habló en el ciclo actual y no figura; ciclo actual sin sección.
 5. **Decisiones:** sección "Decisiones tomadas" o referencias a `D#` inexistentes.
 
+6. **Afirmaciones sobre el registro:** estados que no coinciden ("D4 reemplazada" cuando está
+   pendiente) y propuestas atribuidas a quien no las hizo.
+
+**Condensación automática:** el resumidor ya no copia el estado de las propuestas (el registro
+viaja en cada prompt). Si el acumulativo supera 6.000 caracteres, su próximo prompt le pide
+condensarlo por debajo de 4.000 sin perder contradicciones, pendientes, descartes ni TAGs.
+
 Los **TAGs** de ausencia y de retomado que el resumidor pierda se **vuelven a agregar solos**.
 Si hay problemas, un modal ofrece: **pedir corrección al resumidor** (prompt listo en la misma
 vuelta; su respuesta original queda en la transcripción), **editar vos**, o **guardar igual**
@@ -144,6 +173,9 @@ vuelta; su respuesta original queda en la transcripción), **editar vos**, o **g
   1. **Regenerar el prompt ahora con el adjunto** (misma vuelta; el LLM recibe
      prompt inicial + listado + síntesis anteriores + el archivo pedido).
   2. **Guardar y continuar** (el adjunto viaja en el próximo prompt de ese LLM).
+- **Archivos durante el debate:** botón `+ Agregar` en el panel de archivos. Si un LLM había
+  pedido un archivo que no estaba cargado, al subirlo se le adjunta solo en su próximo prompt.
+  Subir un archivo con el mismo nombre lo reemplaza y habilita reenviarlo.
 - **Entrega única:** los archivos ya adjuntados no se re-envían (viven en el historial del
   chat externo del LLM); los pedidos nuevos viajan solos en la siguiente regeneración.
 - **No propagación:** el adjunto y la mecánica de solicitud NO entran al prompt del
@@ -232,6 +264,7 @@ Pensado sobre todo para los límites de uso de los tiers gratuitos, pero sirve p
 | v0.10 | Registro de decisiones: `PROPONGO` / `APOYO` / `OBJETO` con motivo; estados PROPUESTA, DISPUTADA, ACORDADA, RECHAZADA y REEMPLAZADA; solo el moderador resuelve, con constancia de objeciones y silencios; restauración exacta al retomar. |
 | v0.11 | Chequeo determinista del acumulativo: atribuciones imposibles o sin respaldo, ciclos inexistentes, omisiones, "Decisiones tomadas" y `D#` inexistentes; TAGs perdidos re-agregados; prompt de corrección para el resumidor. |
 | v0.12 | Menos fricción: todos los adjuntos en una línea (`ADJUNTAR: *`), detección tolerante y aviso de archivos inexistentes, atajos Alt+C / Ctrl+Enter / Esc, avisos no bloqueantes, `**RESUMEN:**` en negrita reconocido. |
+| v0.13 | Tras el primer debate real con la herramienta: parser tolerante sin descartes silenciosos, `RETIRO:`, consenso visual (unánime / casi / disputada) con contador, cartel y resolución en lote; archivos durante el debate; regeneración reducida y prompts divididos en partes; condensación automática del acumulativo; chequeo de estados y autorías del registro; vuelta a ciegas sin números de propuesta; Esc ya no deja trabado el cierre de ciclo. |
 
 ---
 
